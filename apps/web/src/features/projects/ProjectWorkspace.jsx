@@ -1,17 +1,33 @@
-import { ArrowLeft, FolderX, Pencil, Trash2 } from 'lucide-react';
-import { useState } from 'react';
-import { Link, NavLink, Outlet, useNavigate, useParams } from 'react-router-dom';
-import { PageHeader } from '../../components/layout/PageHeader.jsx';
-import { Button } from '../../components/ui/Button.jsx';
-import { ConfirmDialog } from '../../components/ui/ConfirmDialog.jsx';
-import { EmptyState, ErrorState, LoadingState } from '../../components/ui/States.jsx';
-import { useToast } from '../../components/ui/Toast.jsx';
-import { useDeleteProject, useProject } from './hooks.js';
-import { ProjectFormModal } from './ProjectFormModal.jsx';
+import { ArrowLeft, FolderX, Pencil, Trash2 } from "lucide-react";
+import { useState } from "react";
+import {
+  Link,
+  NavLink,
+  Outlet,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
+import { PageHeader } from "../../components/layout/PageHeader.jsx";
+import { Button } from "../../components/ui/Button.jsx";
+import { ConfirmDialog } from "../../components/ui/ConfirmDialog.jsx";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+} from "../../components/ui/States.jsx";
+import { useToast } from "../../components/ui/Toast.jsx";
+import { useDeleteProject, useProject } from "./hooks.js";
+import { ProjectFormModal } from "./ProjectFormModal.jsx";
 
 export default function ProjectWorkspace() {
   const { projectId } = useParams();
-  const { data: project, isPending, isError, error, refetch } = useProject(projectId);
+  const {
+    data: project,
+    isPending,
+    isError,
+    error,
+    refetch,
+  } = useProject(projectId);
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const deleteProject = useDeleteProject();
@@ -25,7 +41,14 @@ export default function ProjectWorkspace() {
         icon={FolderX}
         title="Project not found"
         description="It may have been deleted, or the link is incorrect."
-        action={<Link to="/projects" className="text-sm font-medium text-indigo-600 hover:underline">Back to projects</Link>}
+        action={
+          <Link
+            to="/projects"
+            className="text-sm font-medium text-indigo-600 hover:underline"
+          >
+            Back to projects
+          </Link>
+        }
       />
     ) : (
       <ErrorState error={error} onRetry={() => refetch()} />
@@ -34,17 +57,17 @@ export default function ProjectWorkspace() {
 
   const base = `/projects/${project.id}`;
   const tabs = [
-    { to: base, label: 'Overview', end: true },
-    { to: `${base}/urls`, label: 'URLs' },
-    { to: `${base}/evidence`, label: 'Evidence' },
-    { to: `${base}/test-cases`, label: 'Test cases', soon: true },
+    { to: base, label: "Overview", end: true },
+    { to: `${base}/urls`, label: "URLs" },
+    { to: `${base}/evidence`, label: "Evidence" },
+    { to: `${base}/test-cases`, label: "Test cases" },
   ];
 
   async function confirmDelete() {
     try {
       await deleteProject.mutateAsync(project.id);
       toast.success(`Deleted “${project.name}”`);
-      navigate('/projects');
+      navigate("/projects");
     } catch {
       /* shown in dialog */
     }
@@ -52,7 +75,10 @@ export default function ProjectWorkspace() {
 
   return (
     <>
-      <Link to="/projects" className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900">
+      <Link
+        to="/projects"
+        className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-900"
+      >
         <ArrowLeft className="h-4 w-4" aria-hidden="true" /> All projects
       </Link>
 
@@ -61,13 +87,31 @@ export default function ProjectWorkspace() {
         description={project.description}
         actions={
           <>
-            <Button variant="secondary" icon={Pencil} onClick={() => setEditing(true)}>Edit</Button>
-            <Button variant="secondary" icon={Trash2} onClick={() => { deleteProject.reset(); setDeleting(true); }}>Delete</Button>
+            <Button
+              variant="secondary"
+              icon={Pencil}
+              onClick={() => setEditing(true)}
+            >
+              Edit
+            </Button>
+            <Button
+              variant="secondary"
+              icon={Trash2}
+              onClick={() => {
+                deleteProject.reset();
+                setDeleting(true);
+              }}
+            >
+              Delete
+            </Button>
           </>
         }
       />
 
-      <nav aria-label="Project sections" className="mb-6 flex gap-1 overflow-x-auto border-b border-slate-200">
+      <nav
+        aria-label="Project sections"
+        className="mb-6 flex gap-1 overflow-x-auto border-b border-slate-200"
+      >
         {tabs.map((t) => (
           <NavLink
             key={t.to}
@@ -75,12 +119,13 @@ export default function ProjectWorkspace() {
             end={t.end}
             className={({ isActive }) =>
               `-mb-px flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium ${
-                isActive ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-800'
+                isActive
+                  ? "border-indigo-600 text-indigo-700"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
               }`
             }
           >
             {t.label}
-            {t.soon && <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-500">Soon</span>}
           </NavLink>
         ))}
       </nav>
@@ -91,7 +136,10 @@ export default function ProjectWorkspace() {
         <ProjectFormModal
           project={project}
           onClose={() => setEditing(false)}
-          onSaved={() => { setEditing(false); toast.success('Project updated'); }}
+          onSaved={() => {
+            setEditing(false);
+            toast.success("Project updated");
+          }}
         />
       )}
 

@@ -7,13 +7,21 @@ import {
   generationCallbackSchema,
 } from "./generation.schemas.js";
 
-export function generationRouter({ prisma, n8nClient, publicBackendUrl }) {
+export function generationRouter({
+  prisma,
+  n8nClient,
+  publicBackendUrl,
+  evidenceSigningSecret,
+  evidenceUrlTtlSeconds,
+}) {
   const router = Router({ mergeParams: true });
 
   const service = createGenerationService({
     prisma,
     n8nClient,
     publicBackendUrl,
+    evidenceSigningSecret,
+    evidenceUrlTtlSeconds,
   });
 
   // Start test case generation.

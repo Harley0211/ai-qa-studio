@@ -304,18 +304,6 @@ describe("POST /api/projects/:projectId/generations/:runId/callback", () => {
       where: { id: secondRun.runId },
     });
 
-    console.log("Second run ID:", secondRun.runId);
-    console.log("Second callback response:", secondResponse.body);
-    console.log("Second run status:", secondSavedRun?.status);
-    console.log(
-      "Second token hash matches:",
-      secondSavedRun?.callbackTokenHash ===
-        (await import("node:crypto"))
-          .createHash("sha256")
-          .update(secondRun.callbackToken)
-          .digest("hex"),
-    );
-
     expect(secondResponse.status).toBe(200);
 
     const cases = await prisma.testCase.findMany({

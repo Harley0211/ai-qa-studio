@@ -9,6 +9,7 @@ import {
 import { urlsRouter } from "./urls.routes.js";
 import { evidenceRouter } from "../evidence/evidence.routes.js";
 import { generationRouter } from "../generation/generation.routes.js";
+import { testCasesRouter } from "../test-cases/test-cases.routes.js";
 
 export function projectsRouter({
   prisma,
@@ -16,6 +17,8 @@ export function projectsRouter({
   maxUploadBytes,
   n8nClient,
   publicBackendUrl,
+  evidenceSigningSecret,
+  evidenceUrlTtlSeconds,
 }) {
   const router = Router();
   const service = createProjectsService(prisma, storageRoot);
@@ -61,13 +64,26 @@ export function projectsRouter({
   router.use("/:projectId/urls", urlsRouter({ prisma }));
   router.use(
     "/:projectId/evidence",
-    evidenceRouter({ prisma, storageRoot, maxUploadBytes }),
+    evidenceRouter({
+      prisma,
+      storageRoot,
+      maxUploadBytes,
+      evidenceSigningSecret,
+    }),
   );
 
   router.use(
     "/:projectId/generations",
-    generationRouter({ prisma, n8nClient, publicBackendUrl }),
+    generationRouter({
+      prisma,
+      n8nClient,
+      publicBackendUrl,
+      evidenceSigningSecret,
+      evidenceUrlTtlSeconds,
+    }),
   );
+
+  router.use("/:projectId/test-cases", testCasesRouter({ prisma }));
 
   return router;
 }

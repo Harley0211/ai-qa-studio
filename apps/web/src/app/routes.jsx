@@ -1,12 +1,13 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
-import { AppLayout } from '../components/layout/AppLayout.jsx';
-import ComingSoonTab from '../features/projects/ComingSoonTab.jsx';
-import OverviewTab from '../features/projects/OverviewTab.jsx';
-import ProjectsPage from '../features/projects/ProjectsPage.jsx';
-import ProjectWorkspace from '../features/projects/ProjectWorkspace.jsx';
-import UrlsTab from '../features/projects/UrlsTab.jsx';
-import NotFoundPage from './NotFoundPage.jsx';
-import EvidenceTab from '../features/evidence/EvidenceTab.jsx';
+import { Navigate, Route, Routes } from "react-router-dom";
+import { AppLayout } from "../components/layout/AppLayout.jsx";
+import ComingSoonTab from "../features/projects/ComingSoonTab.jsx";
+import OverviewTab from "../features/projects/OverviewTab.jsx";
+import ProjectsPage from "../features/projects/ProjectsPage.jsx";
+import ProjectWorkspace from "../features/projects/ProjectWorkspace.jsx";
+import UrlsTab from "../features/projects/UrlsTab.jsx";
+import NotFoundPage from "./NotFoundPage.jsx";
+import EvidenceTab from "../features/evidence/EvidenceTab.jsx";
+import TestCasesTab from "../features/projects/TestCasesTab.jsx";
 
 export function AppRoutes() {
   return (
@@ -17,7 +18,8 @@ export function AppRoutes() {
         <Route path="/projects/:projectId" element={<ProjectWorkspace />}>
           <Route index element={<OverviewTab />} />
           <Route path="urls" element={<UrlsTab />} />
-          <Route path="evidence" element={<EvidenceTab />} />          <Route path="test-cases" element={<ComingSoonTab title="Test cases" description="Review, edit and export generated and manual test cases." />} />
+          <Route path="evidence" element={<EvidenceTab />} />{" "}
+          <Route path="test-cases" element={<TestCasesTab />} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Route>

@@ -1,6 +1,7 @@
 import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
 
 import { ApiError } from "../../lib/errors.js";
+import { createEvidenceSignature } from "../evidence/evidence.signing.js";
 
 const CALLBACK_TOKEN_TTL_MS = 5 * 60 * 1000;
 
@@ -28,6 +29,8 @@ export function createGenerationService({
   prisma,
   n8nClient,
   publicBackendUrl,
+  evidenceSigningSecret,
+  evidenceUrlTtlSeconds,
 }) {
   async function createRun(projectId, message, evidenceIds = []) {
     const project = await prisma.project.findUnique({
@@ -39,8 +42,10 @@ export function createGenerationService({
       throw new ApiError(404, "NOT_FOUND", "Project not found");
     }
 
+    let evidence = [];
+
     if (evidenceIds.length > 0) {
-      const evidence = await prisma.evidence.findMany({
+      evidence = await prisma.evidence.findMany({
         where: {
           projectId,
           id: { in: evidenceIds },
@@ -78,11 +83,12 @@ export function createGenerationService({
       callbackToken,
       message,
       evidenceIds,
+      evidence,
     };
   }
 
   async function startGeneration(projectId, message, evidenceIds = []) {
-    const { run, callbackToken } = await createRun(
+    const { run, callbackToken, evidence } = await createRun(
       projectId,
       message,
       evidenceIds,
@@ -92,12 +98,34 @@ export function createGenerationService({
       `${publicBackendUrl}/api/projects/${projectId}` +
       `/generations/${run.id}/callback`;
 
+    const expires = String(
+      Math.floor(Date.now() / 1000) + evidenceUrlTtlSeconds,
+    );
+
+    const evidencePayload = evidence.map(({ id }) => {
+      const signature = createEvidenceSignature({
+        secret: evidenceSigningSecret,
+        projectId,
+        evidenceId: id,
+        expires,
+      });
+
+      const url =
+        `${publicBackendUrl.replace(/\/+$/, "")}` +
+        `/api/projects/${encodeURIComponent(projectId)}` +
+        `/evidence/${encodeURIComponent(id)}/signed-file` +
+        `?expires=${expires}&signature=${signature}`;
+
+      return { id, url };
+    });
+
     try {
       await n8nClient.triggerGeneration({
         runId: run.id,
         projectId,
         message,
         evidenceIds,
+        evidence: evidencePayload,
         callbackUrl,
         callbackToken,
       });

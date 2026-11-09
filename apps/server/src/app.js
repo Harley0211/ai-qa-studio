@@ -44,6 +44,8 @@ export function createApp({
       maxUploadBytes: env.MAX_UPLOAD_MB * 1024 * 1024,
       n8nClient,
       publicBackendUrl: env.PUBLIC_BACKEND_URL,
+      evidenceSigningSecret: env.EVIDENCE_SIGNING_SECRET,
+      evidenceUrlTtlSeconds: env.EVIDENCE_URL_TTL_SECONDS,
     }),
   );
 

@@ -32,6 +32,7 @@ const schema = z.object({
     .min(30)
     .max(3600)
     .default(300),
+  EVIDENCE_SIGNING_SECRET: z.string().min(32).optional(),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -42,8 +43,17 @@ if (!parsed.success) {
   throw new Error(`Invalid environment configuration:\n${lines.join("\n")}`);
 }
 
+if (parsed.data.NODE_ENV !== "test" && !parsed.data.EVIDENCE_SIGNING_SECRET) {
+  throw new Error("EVIDENCE_SIGNING_SECRET is required outside test mode");
+}
+
 export const env = Object.freeze({
   ...parsed.data,
+  EVIDENCE_SIGNING_SECRET:
+    parsed.data.EVIDENCE_SIGNING_SECRET ??
+    (parsed.data.NODE_ENV === "test"
+      ? "test-only-evidence-signing-secret-32-chars"
+      : undefined),
   corsOrigins: parsed.data.CORS_ORIGIN.split(",")
     .map((s) => s.trim())
     .filter(Boolean),

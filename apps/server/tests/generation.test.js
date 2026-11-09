@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import { createGenerationService } from "../src/modules/generation/generation.service.js";
+const generationConfig = {
+  evidenceSigningSecret: "test-evidence-signing-secret-32-characters",
+  evidenceUrlTtlSeconds: 300,
+};
 
 function createPrismaMock() {
   let runRecord = null;
@@ -140,6 +144,7 @@ describe("Generation service", () => {
       prisma,
       n8nClient,
       publicBackendUrl: "http://127.0.0.1:4000",
+      ...generationConfig,
     });
 
     const result = await service.startGeneration(
@@ -155,7 +160,19 @@ describe("Generation service", () => {
     const payload = n8nClient.triggerGeneration.mock.calls[0][0];
 
     expect(payload.projectId).toBe("project-1");
-    expect(payload.evidenceIds).toEqual(["evidence-1"]);
+
+    expect(payload.evidence).toHaveLength(1);
+    expect(payload.evidence[0].id).toBe("evidence-1");
+    expect(payload.evidence[0].url).toContain(
+      "/api/projects/project-1/evidence/evidence-1/signed-file",
+    );
+
+    const signedUrl = new URL(payload.evidence[0].url);
+    const expires = signedUrl.searchParams.get("expires");
+    const signature = signedUrl.searchParams.get("signature");
+
+    expect(Number(expires)).toBeGreaterThan(Math.floor(Date.now() / 1000));
+    expect(signature).toMatch(/^[a-f0-9]{64}$/);
     expect(payload.callbackUrl).toContain("/generations/run-1/callback");
     expect(payload.callbackToken).toHaveLength(64);
   });
@@ -175,8 +192,8 @@ describe("Generation service", () => {
       prisma,
       n8nClient,
       publicBackendUrl: "http://127.0.0.1:4000",
+      ...generationConfig,
     });
-
     await expect(
       service.startGeneration("project-1", "Generate test cases"),
     ).rejects.toMatchObject({

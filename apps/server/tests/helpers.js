@@ -21,6 +21,7 @@ export const api = () => request(app);
 export { prisma };
 
 export async function resetDb() {
+  await prisma.testCase.deleteMany();
   await prisma.generationRun.deleteMany();
   await prisma.evidence.deleteMany();
   await prisma.projectURL.deleteMany();
