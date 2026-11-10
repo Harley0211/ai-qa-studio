@@ -152,6 +152,57 @@ describe("POST /api/projects/:projectId/generations", () => {
   });
 });
 
+describe("GET /api/projects/:projectId/generations/:runId", () => {
+  it("returns a pending generation run", async () => {
+    const project = await createProject();
+    const { runId } = await startGeneration(project.id);
+
+    const res = await api().get(
+      `/api/projects/${project.id}/generations/${runId}`,
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({
+      id: runId,
+      status: "PENDING",
+      error: null,
+    });
+    expect(res.body.data.createdAt).toBeDefined();
+  });
+
+  it("returns the updated status after generation succeeds", async () => {
+    const project = await createProject();
+    const { runId, callbackToken, callbackUrl } = await startGeneration(
+      project.id,
+    );
+
+    await sendCallback({ callbackUrl, callbackToken });
+
+    const res = await api().get(
+      `/api/projects/${project.id}/generations/${runId}`,
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({
+      id: runId,
+      status: "SUCCEEDED",
+      error: null,
+    });
+    expect(res.body.data.completedAt).toBeDefined();
+  });
+
+  it("returns 404 for an unknown generation run", async () => {
+    const project = await createProject();
+
+    const res = await api().get(
+      `/api/projects/${project.id}/generations/unknown-run`,
+    );
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe("NOT_FOUND");
+  });
+});
+
 describe("POST /api/projects/:projectId/generations/:runId/callback", () => {
   it("saves generated test cases and completes the run", async () => {
     const project = await createProject({ name: "Callback Project" });

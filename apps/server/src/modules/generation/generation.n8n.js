@@ -42,6 +42,13 @@ export function createN8nClient({
     }
 
     if (!response.ok) {
+      const responseBody = await response.text();
+
+      console.error("[n8n] Webhook request failed:", {
+        status: response.status,
+        body: responseBody,
+      });
+
       const error = new Error(
         `n8n rejected the generation request (${response.status})`,
       );

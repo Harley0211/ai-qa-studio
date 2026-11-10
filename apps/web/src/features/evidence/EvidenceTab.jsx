@@ -1,29 +1,28 @@
-
 import {
   FileImage,
   ImagePlus,
   Trash2,
   Upload,
   X,
-} from 'lucide-react';
-import { useRef, useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
-import { Button, IconButton } from '../../components/ui/Button.jsx';
-import { ConfirmDialog } from '../../components/ui/ConfirmDialog.jsx';
+  Sparkles,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useOutletContext } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import { Button, IconButton } from "../../components/ui/Button.jsx";
+import { ConfirmDialog } from "../../components/ui/ConfirmDialog.jsx";
 import {
   EmptyState,
   ErrorState,
   LoadingState,
-} from '../../components/ui/States.jsx';
-import { useToast } from '../../components/ui/Toast.jsx';
-import {
-  useDeleteEvidence,
-  useEvidence,
-  useUploadEvidence,
-} from './hooks.js';
+} from "../../components/ui/States.jsx";
+import { useToast } from "../../components/ui/Toast.jsx";
+import { useDeleteEvidence, useEvidence, useUploadEvidence } from "./hooks.js";
+import { useGenerateTestCases, useGenerationRun } from "./generation.hooks.js";
 
 const MAX_UPLOAD_SIZE = 5 * 1024 * 1024;
-const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+const MAX_GENERATION_EVIDENCE = 20;
+const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
 function formatFileSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -33,8 +32,8 @@ function formatFileSize(bytes) {
 
 function formatDate(value) {
   return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
+    dateStyle: "medium",
+    timeStyle: "short",
   }).format(new Date(value));
 }
 
@@ -44,37 +43,60 @@ export default function EvidenceTab() {
   const [dragging, setDragging] = useState(false);
   const [preview, setPreview] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [runId, setRunId] = useState(null);
+
+  const queryClient = useQueryClient();
+  const toast = useToast();
 
   const { data, isPending, isError, error, refetch } = useEvidence(project.id);
   const uploadEvidence = useUploadEvidence(project.id);
   const deleteEvidence = useDeleteEvidence(project.id);
-  const toast = useToast();
+  const generateTestCases = useGenerateTestCases(project.id);
+  const generation = useGenerationRun(project.id, runId);
 
   const items = data?.items ?? [];
+  const isGenerating =
+    generateTestCases.isPending ||
+    (Boolean(runId) && generation.data?.data?.status === "PENDING");
+  useEffect(() => {
+    if (generation.data?.data?.status === "SUCCEEDED" && runId) {
+      queryClient.invalidateQueries({
+        queryKey: ["test-cases", project.id],
+      });
+
+      toast.success("Test cases generated successfully.");
+      setRunId(null);
+    }
+
+    if (generation.data?.data?.status === "FAILED" && runId) {
+      toast.error(generation.data.data.error || "Test case generation failed.");
+      setRunId(null);
+    }
+  }, [generation.data, project.id, queryClient, runId, toast]);
 
   async function handleFile(file) {
     if (!file) return;
 
     if (!ALLOWED_TYPES.includes(file.type)) {
-      toast.error('Only PNG, JPG, JPEG, and WEBP images are supported.');
+      toast.error("Only PNG, JPG, JPEG, and WEBP images are supported.");
       return;
     }
 
     if (file.size > MAX_UPLOAD_SIZE) {
-      toast.error('Image exceeds the maximum upload size of 5 MB.');
+      toast.error("Image exceeds the maximum upload size of 5 MB.");
       return;
     }
 
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append("file", file);
 
     try {
       await uploadEvidence.mutateAsync(formData);
-      toast.success('Evidence uploaded successfully.');
+      toast.success("Evidence uploaded successfully.");
     } catch (err) {
-      toast.error(err.message || 'Unable to upload evidence.');
+      toast.error(err.message || "Unable to upload evidence.");
     } finally {
-      if (fileInput.current) fileInput.current.value = '';
+      if (fileInput.current) fileInput.current.value = "";
     }
   }
 
@@ -84,10 +106,40 @@ export default function EvidenceTab() {
     handleFile(event.dataTransfer.files?.[0]);
   }
 
+  async function handleGenerate() {
+    if (items.length === 0) {
+      toast.error("Upload at least one image before generating test cases.");
+      return;
+    }
+
+    const evidenceIds = items
+      .slice(0, MAX_GENERATION_EVIDENCE)
+      .map((item) => item.id);
+
+    try {
+      const result = await generateTestCases.mutateAsync({
+        message:
+          "Analyze the uploaded application screenshots and generate detailed, comprehensive functional test cases. Cover visible UI elements, user interactions, validations, navigation, positive and negative scenarios, and relevant edge cases. Return clear, actionable steps and expected results.",
+        evidenceIds,
+      });
+
+      setRunId(result.data.id);
+      if (items.length > MAX_GENERATION_EVIDENCE) {
+        toast.success(
+          `Generation started using the first ${MAX_GENERATION_EVIDENCE} images.`,
+        );
+      } else {
+        toast.success("Test case generation started.");
+      }
+    } catch (err) {
+      toast.error(err.message || "Unable to start test case generation.");
+    }
+  }
+
   async function confirmDelete() {
     try {
       await deleteEvidence.mutateAsync(deleting.id);
-      toast.success('Evidence deleted.');
+      toast.success("Evidence deleted.");
       if (preview?.id === deleting.id) setPreview(null);
       setDeleting(null);
     } catch {
@@ -98,11 +150,10 @@ export default function EvidenceTab() {
   return (
     <section>
       <div className="mb-5">
-        <h2 className="text-base font-semibold text-slate-900">
-          Evidence
-        </h2>
+        <h2 className="text-base font-semibold text-slate-900">Evidence</h2>
         <p className="text-sm text-slate-500">
-          Upload screenshots and images that will be used to generate test cases.
+          Upload screenshots and images that will be used to generate test
+          cases.
         </p>
       </div>
 
@@ -119,8 +170,8 @@ export default function EvidenceTab() {
         onDrop={handleDrop}
         className={`mb-6 flex flex-col items-center rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors ${
           dragging
-            ? 'border-indigo-500 bg-indigo-50'
-            : 'border-slate-300 bg-white'
+            ? "border-indigo-500 bg-indigo-50"
+            : "border-slate-300 bg-white"
         }`}
       >
         <div className="mb-3 rounded-full bg-indigo-50 p-3">
@@ -162,6 +213,44 @@ export default function EvidenceTab() {
         )}
       </div>
 
+      <div className="mb-6 rounded-xl border border-indigo-100 bg-indigo-50 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">
+              Generate test cases
+            </h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Analyze your uploaded screenshots with AI and create test cases.
+              Maximum 20 images per generation.
+            </p>
+          </div>
+
+          <Button
+            icon={Sparkles}
+            loading={isGenerating}
+            disabled={
+              items.length === 0 || isGenerating || generateTestCases.isPending
+            }
+            onClick={handleGenerate}
+          >
+            Generate Test Cases
+          </Button>
+        </div>
+
+        {runId && generation.data?.data?.status === "PENDING" && (
+          <p role="status" className="mt-3 text-sm text-indigo-700">
+            AI is analyzing your evidence. This may take a few minutes...
+          </p>
+        )}
+
+        {generation.isError && runId && (
+          <p role="alert" className="mt-3 text-sm text-red-600">
+            Unable to check generation status. Please refresh and check your
+            Test Cases tab.
+          </p>
+        )}
+      </div>
+
       {isPending ? (
         <LoadingState label="Loading evidence..." />
       ) : isError ? (
@@ -179,14 +268,13 @@ export default function EvidenceTab() {
               Uploaded images
             </h3>
             <span className="text-xs text-slate-500">
-              {data.total} {data.total === 1 ? 'image' : 'images'}
+              {data.total} {data.total === 1 ? "image" : "images"}
             </span>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {items.map((item) => {
-              const imageUrl =
-                `/api/projects/${project.id}/evidence/${item.id}/file`;
+              const imageUrl = `/api/projects/${project.id}/evidence/${item.id}/file`;
 
               return (
                 <article
@@ -254,9 +342,7 @@ export default function EvidenceTab() {
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mb-2 flex items-center justify-between gap-4 text-white">
-              <p className="truncate text-sm font-medium">
-                {preview.filename}
-              </p>
+              <p className="truncate text-sm font-medium">{preview.filename}</p>
               <IconButton
                 icon={X}
                 label="Close preview"
