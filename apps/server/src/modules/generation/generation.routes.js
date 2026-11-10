@@ -72,5 +72,17 @@ export function generationRouter({
     }),
   );
 
+  router.get(
+    "/:runId",
+    asyncHandler(async (req, res) => {
+      const result = await service.getGenerationRun(
+        req.params.projectId,
+        req.params.runId,
+      );
+
+      res.status(200).json({ data: result });
+    }),
+  );
+
   return router;
 }

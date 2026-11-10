@@ -78,6 +78,28 @@ export function createGenerationService({
       },
     });
 
+    async function getGenerationRun(projectId, runId) {
+      const run = await prisma.generationRun.findFirst({
+        where: {
+          id: runId,
+          projectId,
+        },
+        select: {
+          id: true,
+          status: true,
+          error: true,
+          createdAt: true,
+          completedAt: true,
+        },
+      });
+
+      if (!run) {
+        throw new ApiError(404, "NOT_FOUND", "Generation run not found");
+      }
+
+      return run;
+    }
+
     return {
       run,
       callbackToken,
@@ -262,5 +284,6 @@ export function createGenerationService({
     createRun,
     startGeneration,
     completeGeneration,
+    getGenerationRun,
   };
 }
