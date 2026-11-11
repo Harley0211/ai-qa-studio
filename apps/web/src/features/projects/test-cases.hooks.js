@@ -32,6 +32,10 @@ export function useTestCases(projectId, filters = {}) {
   });
 }
 
+export function useAllTestCases(projectId) {
+  return useTestCases(projectId);
+}
+
 export function useCreateTestCase(projectId) {
   const queryClient = useQueryClient();
 

@@ -85,6 +85,7 @@ describe("n8n client", () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: false,
       status: 401,
+      text: vi.fn().mockResolvedValue("Unauthorized"),
     });
 
     const client = createN8nClient({ ...config, fetchImpl });

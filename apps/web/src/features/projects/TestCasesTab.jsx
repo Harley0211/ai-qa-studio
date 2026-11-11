@@ -10,6 +10,7 @@ import {
 } from "../../components/ui/States.jsx";
 import { useToast } from "../../components/ui/Toast.jsx";
 import {
+  useAllTestCases,
   useDeleteTestCase,
   useTestCases,
   useUpdateTestCaseStatus,
@@ -52,12 +53,33 @@ export default function TestCasesTab() {
     project.id,
     filters,
   );
+  const { data: allData } = useAllTestCases(project.id);
 
   const deleteTestCase = useDeleteTestCase(project.id);
   const updateStatus = useUpdateTestCaseStatus(project.id);
   const toast = useToast();
 
   const items = data?.items ?? [];
+  const allItems = allData?.items ?? [];
+
+  const totalCount = allItems.length;
+  const passedCount = allItems.filter(
+    (item) => item.runStatus === "Passed",
+  ).length;
+  const failedCount = allItems.filter(
+    (item) => item.runStatus === "Failed",
+  ).length;
+  const blockedCount = allItems.filter(
+    (item) => item.runStatus === "Blocked",
+  ).length;
+  const notRunCount = allItems.filter(
+    (item) => item.runStatus === "Not Run",
+  ).length;
+
+  const completedCount = passedCount + failedCount + blockedCount;
+  const progress = totalCount
+    ? Math.round((completedCount / totalCount) * 100)
+    : 0;
 
   function openAdd() {
     setEditing(null);
@@ -106,7 +128,54 @@ export default function TestCasesTab() {
           Add test case
         </Button>
       </div>
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {[
+          { label: "Total", count: totalCount, color: "text-slate-900" },
+          { label: "Passed", count: passedCount, color: "text-green-600" },
+          { label: "Failed", count: failedCount, color: "text-red-600" },
+          { label: "Blocked", count: blockedCount, color: "text-amber-600" },
+          { label: "Not Run", count: notRunCount, color: "text-slate-600" },
+        ].map((stat) => (
+          <div
+            key={stat.label}
+            className="rounded-xl border border-slate-200 bg-white p-4"
+          >
+            <p className="text-xs font-medium text-slate-500">{stat.label}</p>
+            <p className={`mt-1 text-2xl font-semibold ${stat.color}`}>
+              {stat.count}
+            </p>
+          </div>
+        ))}
+      </div>
 
+      <div className="mb-5 rounded-xl border border-slate-200 bg-white p-4">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-sm font-medium text-slate-700">
+            Execution progress
+          </span>
+          <span className="text-sm font-semibold text-slate-900">
+            {progress}%
+          </span>
+        </div>
+
+        <div
+          className="h-2 overflow-hidden rounded-full bg-slate-100"
+          role="progressbar"
+          aria-label="Test execution progress"
+          aria-valuenow={progress}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
+          <div
+            className="h-full rounded-full bg-indigo-600 transition-all"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+
+        <p className="mt-2 text-xs text-slate-500">
+          {completedCount} of {totalCount} test cases executed
+        </p>
+      </div>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row">
         <input
           type="search"
