@@ -81,6 +81,7 @@ model TestCase {
   steps          String
   data           String?
   expectedResult String
+  stepExpectedResults String?
   runStatus      String   @default("Not Run")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

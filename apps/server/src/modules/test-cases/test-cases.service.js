@@ -14,6 +14,7 @@ const testCaseSelect = {
   runStatus: true,
   createdAt: true,
   updatedAt: true,
+  stepExpectedResults: true,
 };
 
 function normalizeSteps(steps) {
@@ -22,6 +23,16 @@ function normalizeSteps(steps) {
   }
 
   return steps;
+}
+function parseStepExpectedResults(testCase) {
+  if (!testCase) return testCase;
+
+  return {
+    ...testCase,
+    stepExpectedResults: testCase.stepExpectedResults
+      ? JSON.parse(testCase.stepExpectedResults)
+      : null,
+  };
 }
 
 export function createTestCasesService(prisma) {
@@ -46,7 +57,7 @@ export function createTestCasesService(prisma) {
 
     if (!testCase) throw notFound("Test case");
 
-    return testCase;
+    return parseStepExpectedResults(testCase);
   }
 
   return {
@@ -72,7 +83,10 @@ export function createTestCasesService(prisma) {
         select: testCaseSelect,
       });
 
-      return { items, total: items.length };
+      return {
+        items: items.map(parseStepExpectedResults),
+        total: items.length,
+      };
     },
 
     async create(projectId, input) {
@@ -92,7 +106,7 @@ export function createTestCasesService(prisma) {
         const number = project.nextTestCaseNumber - 1;
         const caseId = `TC-${String(number).padStart(4, "0")}`;
 
-        return tx.testCase.create({
+        const created = await tx.testCase.create({
           data: {
             projectId,
             caseId,
@@ -101,11 +115,15 @@ export function createTestCasesService(prisma) {
             precondition: input.precondition ?? null,
             steps: normalizeSteps(input.steps),
             data: input.data ?? null,
+            stepExpectedResults: input.stepExpectedResults
+              ? JSON.stringify(input.stepExpectedResults)
+              : null,
             expectedResult: input.expectedResult,
             runStatus: "Not Run",
           },
           select: testCaseSelect,
         });
+        return parseStepExpectedResults(created);
       });
     },
 
@@ -117,16 +135,21 @@ export function createTestCasesService(prisma) {
       const existing = await getTestCase(projectId, testCaseId);
 
       const data = { ...input };
+      if (Array.isArray(data.stepExpectedResults)) {
+        data.stepExpectedResults = JSON.stringify(data.stepExpectedResults);
+      }
 
       if (Array.isArray(data.steps)) {
         data.steps = normalizeSteps(data.steps);
       }
 
-      return prisma.testCase.update({
+      const updated = await prisma.testCase.update({
         where: { id: existing.id },
         data,
         select: testCaseSelect,
       });
+
+      return parseStepExpectedResults(updated);
     },
 
     async updateStatus(projectId, testCaseId, runStatus) {

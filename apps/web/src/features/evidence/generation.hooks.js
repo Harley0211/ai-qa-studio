@@ -10,10 +10,11 @@ export function useGenerateTestCases(projectId) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ message, evidenceIds }) =>
+    mutationFn: ({ message, evidenceIds, generationFormat = "OVERALL" }) =>
       api.post(`/projects/${encodeURIComponent(projectId)}/generations`, {
         message,
         evidenceIds,
+        generationFormat,
       }),
 
     onSuccess: () => {

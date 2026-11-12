@@ -109,7 +109,12 @@ export function createGenerationService({
     };
   }
 
-  async function startGeneration(projectId, message, evidenceIds = []) {
+  async function startGeneration(
+    projectId,
+    message,
+    evidenceIds = [],
+    generationFormat = "OVERALL",
+  ) {
     const { run, callbackToken, evidence } = await createRun(
       projectId,
       message,
@@ -146,6 +151,7 @@ export function createGenerationService({
         runId: run.id,
         projectId,
         message,
+        generationFormat,
         evidenceIds,
         evidence: evidencePayload,
         callbackUrl,
@@ -254,6 +260,10 @@ export function createGenerationService({
           : testCase.steps,
         data: testCase.data ?? null,
         expectedResult: testCase.expectedResult,
+        stepExpectedResults: testCase.stepExpectedResults
+          ? JSON.stringify(testCase.stepExpectedResults)
+          : null,
+
         runStatus: "Not Run",
       }));
 

@@ -12,6 +12,12 @@ const testCaseFields = {
   description: z.string().max(5000).nullable().optional(),
   precondition: z.string().max(5000).nullable().optional(),
   steps: stepsSchema,
+  stepExpectedResults: z
+    .array(z.string().trim().min(1).max(5000))
+    .min(1)
+    .max(50)
+    .nullable()
+    .optional(),
   data: z.string().max(5000).nullable().optional(),
   expectedResult: z.string().trim().min(1).max(5000),
 };

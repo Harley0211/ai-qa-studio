@@ -1,0 +1,134 @@
+
+> @aqs/server@0.1.0 test
+> vitest run --reporter=verbose
+
+
+[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mC:/Users/DNOQA-agent/Documents/HAR/ai-qa-studio/apps/server[39m
+
+ [32m✓[39m tests/test-cases.test.js[2m > [22mPOST /api/projects/:projectId/test-cases[2m > [22mcreates a manual test case with a sequential case ID[32m 46[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mPOST /api/projects/:projectId/test-cases[2m > [22mincrements case IDs for subsequent test cases[32m 36[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mPOST /api/projects/:projectId/test-cases[2m > [22mstores optional fields as null when omitted[32m 29[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mPOST /api/projects/:projectId/test-cases[2m > [22maccepts steps as a string[32m 28[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mPOST /api/projects/:projectId/test-cases[2m > [22mrejects a blank title[32m 23[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mPOST /api/projects/:projectId/test-cases[2m > [22mrejects missing expected results[32m 17[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mPOST /api/projects/:projectId/test-cases[2m > [22mrejects an empty steps array[32m 17[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mPOST /api/projects/:projectId/test-cases[2m > [22mreturns 404 for an unknown project[32m 8[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mGET /api/projects/:projectId/test-cases[2m > [22mreturns an empty list when no test cases exist[32m 10[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mGET /api/projects/:projectId/test-cases[2m > [22mlists test cases in case ID order[32m 30[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mGET /api/projects/:projectId/test-cases[2m > [22mfilters test cases by title or case ID[32m 36[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mGET /api/projects/:projectId/test-cases[2m > [22mfilters test cases by execution status[32m 45[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mGET /api/projects/:projectId/test-cases/:testCaseId[2m > [22mreturns a single test case[32m 28[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mGET /api/projects/:projectId/test-cases/:testCaseId[2m > [22mreturns 404 for an unknown test case[32m 20[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mPATCH /api/projects/:projectId/test-cases/:testCaseId[2m > [22mupdates test case details[32m 28[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mPATCH /api/projects/:projectId/test-cases/:testCaseId[2m > [22mrejects an empty update body[32m 29[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mPATCH /api/projects/:projectId/test-cases/:testCaseId[2m > [22mreturns 404 for an unknown test case[32m 20[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mPATCH /api/projects/:projectId/test-cases/:testCaseId/status[2m > [22mupdates execution status to Passed[32m 30[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mPATCH /api/projects/:projectId/test-cases/:testCaseId/status[2m > [22mupdates execution status to Failed[32m 41[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mPATCH /api/projects/:projectId/test-cases/:testCaseId/status[2m > [22mupdates execution status to Blocked[32m 111[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mPATCH /api/projects/:projectId/test-cases/:testCaseId/status[2m > [22mupdates execution status to Not Run[32m 36[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mPATCH /api/projects/:projectId/test-cases/:testCaseId/status[2m > [22mrejects an unsupported execution status[32m 28[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mDELETE /api/projects/:projectId/test-cases/:testCaseId[2m > [22mdeletes a test case[32m 34[2mms[22m[39m
+ [32m✓[39m tests/test-cases.test.js[2m > [22mDELETE /api/projects/:projectId/test-cases/:testCaseId[2m > [22mreturns 404 for an unknown test case[32m 15[2mms[22m[39m
+ [32m✓[39m tests/generation.routes.test.js[2m > [22mPOST /api/projects/:projectId/generations[2m > [22mstarts generation and returns a pending run[32m 51[2mms[22m[39m
+ [32m✓[39m tests/generation.routes.test.js[2m > [22mPOST /api/projects/:projectId/generations[2m > [22mrejects an empty prompt[32m 21[2mms[22m[39m
+ [32m✓[39m tests/generation.routes.test.js[2m > [22mPOST /api/projects/:projectId/generations[2m > [22mrejects an unknown project[32m 8[2mms[22m[39m
+ [32m✓[39m tests/generation.routes.test.js[2m > [22mPOST /api/projects/:projectId/generations[2m > [22mrejects evidence IDs that do not belong to the project[32m 10[2mms[22m[39m
+ [32m✓[39m tests/generation.routes.test.js[2m > [22mPOST /api/projects/:projectId/generations[2m > [22mreturns an error and marks the run failed when n8n is unavailable[32m 26[2mms[22m[39m
+ [32m✓[39m tests/generation.routes.test.js[2m > [22mGET /api/projects/:projectId/generations/:runId[2m > [22mreturns a pending generation run[32m 28[2mms[22m[39m
+ [32m✓[39m tests/generation.routes.test.js[2m > [22mGET /api/projects/:projectId/generations/:runId[2m > [22mreturns the updated status after generation succeeds[32m 37[2mms[22m[39m
+ [32m✓[39m tests/generation.routes.test.js[2m > [22mGET /api/projects/:projectId/generations/:runId[2m > [22mreturns 404 for an unknown generation run[32m 24[2mms[22m[39m
+ [32m✓[39m tests/generation.routes.test.js[2m > [22mPOST /api/projects/:projectId/generations/:runId/callback[2m > [22msaves generated test cases and completes the run[32m 30[2mms[22m[39m
+ [32m✓[39m tests/generation.routes.test.js[2m > [22mPOST /api/projects/:projectId/generations/:runId/callback[2m > [22mrejects a callback without an authorization header[32m 33[2mms[22m[39m
+ [32m✓[39m tests/generation.routes.test.js[2m > [22mPOST /api/projects/:projectId/generations/:runId/callback[2m > [22mrejects an invalid callback token[32m 29[2mms[22m[39m
+ [32m✓[39m tests/generation.routes.test.js[2m > [22mPOST /api/projects/:projectId/generations/:runId/callback[2m > [22mrejects an expired callback token[32m 33[2mms[22m[39m
+ [32m✓[39m tests/generation.routes.test.js[2m > [22mPOST /api/projects/:projectId/generations/:runId/callback[2m > [22mrejects a duplicate callback[32m 37[2mms[22m[39m
+ [32m✓[39m tests/generation.routes.test.js[2m > [22mPOST /api/projects/:projectId/generations/:runId/callback[2m > [22mrejects malformed test cases without consuming the callback token[32m 41[2mms[22m[39m
+ [32m✓[39m tests/generation.routes.test.js[2m > [22mPOST /api/projects/:projectId/generations/:runId/callback[2m > [22mcontinues sequential test case IDs across generation runs[32m 55[2mms[22m[39m
+ [32m✓[39m tests/evidence.test.js[2m > [22mPOST /api/projects/:projectId/evidence[2m > [22muploads a valid PNG image[32m 65[2mms[22m[39m
+ [32m✓[39m tests/evidence.test.js[2m > [22mPOST /api/projects/:projectId/evidence[2m > [22muploads a valid JPEG image[32m 28[2mms[22m[39m
+ [32m✓[39m tests/evidence.test.js[2m > [22mPOST /api/projects/:projectId/evidence[2m > [22muploads a valid WEBP image[32m 29[2mms[22m[39m
+ [32m✓[39m tests/evidence.test.js[2m > [22mPOST /api/projects/:projectId/evidence[2m > [22mrejects invalid image contents even when the MIME type says PNG[32m 21[2mms[22m[39m
+ [32m✓[39m tests/evidence.test.js[2m > [22mPOST /api/projects/:projectId/evidence[2m > [22mrejects uploads without a file[32m 16[2mms[22m[39m
+ [32m✓[39m tests/evidence.test.js[2m > [22mPOST /api/projects/:projectId/evidence[2m > [22mrejects files exceeding the upload size limit[32m 24[2mms[22m[39m
+ [32m✓[39m tests/evidence.test.js[2m > [22mPOST /api/projects/:projectId/evidence[2m > [22mreturns 404 when uploading to a nonexistent project[32m 8[2mms[22m[39m
+ [32m✓[39m tests/evidence.test.js[2m > [22mGET /api/projects/:projectId/evidence[2m > [22mlists evidence belonging to a project[32m 18[2mms[22m[39m
+ [32m✓[39m tests/evidence.test.js[2m > [22mGET /api/projects/:projectId/evidence[2m > [22mreturns 404 for a nonexistent project[32m 12[2mms[22m[39m
+ [32m✓[39m tests/evidence.test.js[2m > [22mGET /api/projects/:projectId/evidence/:evidenceId/file[2m > [22mreturns the uploaded image[32m 21[2mms[22m[39m
+ [32m✓[39m tests/evidence.test.js[2m > [22mGET /api/projects/:projectId/evidence/:evidenceId/file[2m > [22mprevents access through another project[32m 37[2mms[22m[39m
+ [32m✓[39m tests/evidence.test.js[2m > [22mGET /api/projects/:projectId/evidence/:evidenceId/signed-file[2m > [22mdownloads an image using a valid signed URL[32m 35[2mms[22m[39m
+ [32m✓[39m tests/evidence.test.js[2m > [22mGET /api/projects/:projectId/evidence/:evidenceId/signed-file[2m > [22mrejects an invalid signature[32m 29[2mms[22m[39m
+ [32m✓[39m tests/evidence.test.js[2m > [22mGET /api/projects/:projectId/evidence/:evidenceId/signed-file[2m > [22mrejects an expired signed URL[32m 29[2mms[22m[39m
+ [32m✓[39m tests/evidence.test.js[2m > [22mGET /api/projects/:projectId/evidence/:evidenceId/signed-file[2m > [22mrejects a signed URL used with another project ID[32m 35[2mms[22m[39m
+ [32m✓[39m tests/evidence.test.js[2m > [22mGET /api/projects/:projectId/evidence/:evidenceId/signed-file[2m > [22mrejects a signed URL used with another evidence ID[32m 35[2mms[22m[39m
+ [32m✓[39m tests/evidence.test.js[2m > [22mDELETE /api/projects/:projectId/evidence/:evidenceId[2m > [22mdeletes the evidence record and physical file[32m 39[2mms[22m[39m
+ [32m✓[39m tests/evidence.test.js[2m > [22mDELETE /api/projects/:projectId/evidence/:evidenceId[2m > [22mreturns 404 for nonexistent evidence[32m 15[2mms[22m[39m
+ [32m✓[39m tests/evidence.test.js[2m > [22mDELETE /api/projects/:projectId/evidence/:evidenceId[2m > [22mremoves physical evidence files when the project is deleted[32m 32[2mms[22m[39m
+ [32m✓[39m tests/urls.test.js[2m > [22mPOST /api/projects/:id/urls[2m > [22madds a URL, normalising it and trimming the label[32m 44[2mms[22m[39m
+ [32m✓[39m tests/urls.test.js[2m > [22mPOST /api/projects/:id/urls[2m > [22mrejects javascript:alert(1)[32m 22[2mms[22m[39m
+ [32m✓[39m tests/urls.test.js[2m > [22mPOST /api/projects/:id/urls[2m > [22mrejects ftp://example.com[32m 16[2mms[22m[39m
+ [32m✓[39m tests/urls.test.js[2m > [22mPOST /api/projects/:id/urls[2m > [22mrejects not a url[32m 17[2mms[22m[39m
+ [32m✓[39m tests/urls.test.js[2m > [22mPOST /api/projects/:id/urls[2m > [22mrejects https://user:pass@example.com[32m 16[2mms[22m[39m
+ [32m✓[39m tests/urls.test.js[2m > [22mPOST /api/projects/:id/urls[2m > [22mrejects a missing URL[32m 15[2mms[22m[39m
+ [32m✓[39m tests/urls.test.js[2m > [22mPOST /api/projects/:id/urls[2m > [22mrejects a duplicate URL within the same project with 409[32m 37[2mms[22m[39m
+ [32m✓[39m tests/urls.test.js[2m > [22mPOST /api/projects/:id/urls[2m > [22mallows the same URL in different projects[32m 40[2mms[22m[39m
+ [32m✓[39m tests/urls.test.js[2m > [22mPOST /api/projects/:id/urls[2m > [22mreturns 404 for an unknown project[32m 12[2mms[22m[39m
+ [32m✓[39m tests/urls.test.js[2m > [22mGET /api/projects/:id/urls[2m > [22mlists URLs in creation order[32m 27[2mms[22m[39m
+ [32m✓[39m tests/urls.test.js[2m > [22mPATCH /api/projects/:id/urls/:urlId[2m > [22mupdates label and URL[32m 32[2mms[22m[39m
+ [32m✓[39m tests/urls.test.js[2m > [22mPATCH /api/projects/:id/urls/:urlId[2m > [22mrejects changing to a URL that already exists in the project[32m 34[2mms[22m[39m
+ [32m✓[39m tests/urls.test.js[2m > [22mPATCH /api/projects/:id/urls/:urlId[2m > [22mdoes not allow editing another project's URL[32m 35[2mms[22m[39m
+ [32m✓[39m tests/urls.test.js[2m > [22mDELETE /api/projects/:id/urls/:urlId[2m > [22mdeletes a URL[32m 34[2mms[22m[39m
+ [32m✓[39m tests/urls.test.js[2m > [22mDELETE /api/projects/:id/urls/:urlId[2m > [22mdoes not allow deleting another project's URL[32m 29[2mms[22m[39m
+ [32m✓[39m tests/urls.test.js[2m > [22mDELETE /api/projects/:id/urls/:urlId[2m > [22mreturns 404 for an unknown URL[32m 21[2mms[22m[39m
+ [32m✓[39m tests/projects.test.js[2m > [22mPOST /api/projects[2m > [22mcreates a project and trims input[32m 40[2mms[22m[39m
+ [32m✓[39m tests/projects.test.js[2m > [22mPOST /api/projects[2m > [22mstores an empty description as null[32m 15[2mms[22m[39m
+ [32m✓[39m tests/projects.test.js[2m > [22mPOST /api/projects[2m > [22mcreates an initial application URL when provided[32m 14[2mms[22m[39m
+ [32m✓[39m tests/projects.test.js[2m > [22mPOST /api/projects[2m > [22mrejects a missing or blank name with field errors[32m 14[2mms[22m[39m
+ [32m✓[39m tests/projects.test.js[2m > [22mPOST /api/projects[2m > [22mrejects a name longer than 120 characters[32m 3[2mms[22m[39m
+ [32m✓[39m tests/projects.test.js[2m > [22mPOST /api/projects[2m > [22mrejects non-http initial URLs[32m 2[2mms[22m[39m
+ [32m✓[39m tests/projects.test.js[2m > [22mPOST /api/projects[2m > [22mrejects malformed JSON[32m 4[2mms[22m[39m
+ [32m✓[39m tests/projects.test.js[2m > [22mGET /api/projects[2m > [22mreturns an empty list when there are no projects[32m 3[2mms[22m[39m
+ [32m✓[39m tests/projects.test.js[2m > [22mGET /api/projects[2m > [22mlists projects with URL counts, most recently updated first[32m 37[2mms[22m[39m
+ [32m✓[39m tests/projects.test.js[2m > [22mGET /api/projects[2m > [22mfilters by name[32m 28[2mms[22m[39m
+ [32m✓[39m tests/projects.test.js[2m > [22mGET /api/projects/:id[2m > [22mreturns the project with its URLs[32m 16[2mms[22m[39m
+ [32m✓[39m tests/projects.test.js[2m > [22mGET /api/projects/:id[2m > [22mreturns 404 for an unknown project[32m 14[2mms[22m[39m
+ [32m✓[39m tests/projects.test.js[2m > [22mPATCH /api/projects/:id[2m > [22mupdates the name[32m 15[2mms[22m[39m
+ [32m✓[39m tests/projects.test.js[2m > [22mPATCH /api/projects/:id[2m > [22mclears the description with null or an empty string[32m 19[2mms[22m[39m
+ [32m✓[39m tests/projects.test.js[2m > [22mPATCH /api/projects/:id[2m > [22mrejects an empty body[32m 15[2mms[22m[39m
+ [32m✓[39m tests/projects.test.js[2m > [22mPATCH /api/projects/:id[2m > [22mrejects a blank name[32m 14[2mms[22m[39m
+ [32m✓[39m tests/projects.test.js[2m > [22mPATCH /api/projects/:id[2m > [22mreturns 404 for an unknown project[32m 21[2mms[22m[39m
+ [32m✓[39m tests/projects.test.js[2m > [22mDELETE /api/projects/:id[2m > [22mdeletes the project and cascades to its URLs[32m 19[2mms[22m[39m
+ [32m✓[39m tests/projects.test.js[2m > [22mDELETE /api/projects/:id[2m > [22mreturns 404 for an unknown project[32m 3[2mms[22m[39m
+ [32m✓[39m tests/health.test.js[2m > [22mGET /api/health[2m > [22mreports database connectivity[32m 20[2mms[22m[39m
+ [32m✓[39m tests/health.test.js[2m > [22mGET /api/health[2m > [22mreturns a JSON error envelope for unknown API routes[32m 3[2mms[22m[39m
+ [32m✓[39m tests/health.test.js[2m > [22mGET /api/health[2m > [22mrejects requests whose Host header is not a localhost address[32m 3[2mms[22m[39m
+[90mstderr[2m | tests/generation.n8n.test.js[2m > [22m[2mn8n client[2m > [22m[2mhandles unsuccessful n8n responses
+[22m[39m[n8n] Webhook request failed: { status: [33m401[39m, body: [32m'Unauthorized'[39m }
+
+ [32m✓[39m tests/generation.n8n.test.js[2m > [22mn8n client[2m > [22msends an authenticated POST request to n8n[32m 3[2mms[22m[39m
+ [32m✓[39m tests/generation.n8n.test.js[2m > [22mn8n client[2m > [22mrejects when n8n is not configured[32m 1[2mms[22m[39m
+ [32m✓[39m tests/generation.n8n.test.js[2m > [22mn8n client[2m > [22mhandles connection errors[32m 0[2mms[22m[39m
+ [32m✓[39m tests/generation.n8n.test.js[2m > [22mn8n client[2m > [22mhandles request timeouts[32m 0[2mms[22m[39m
+ [32m✓[39m tests/generation.n8n.test.js[2m > [22mn8n client[2m > [22mhandles unsuccessful n8n responses[32m 1[2mms[22m[39m
+ [32m✓[39m tests/generation.test.js[2m > [22mGeneration service[2m > [22mcreates a pending generation run[32m 2[2mms[22m[39m
+ [32m✓[39m tests/generation.test.js[2m > [22mGeneration service[2m > [22mstores only the callback token hash[32m 1[2mms[22m[39m
+ [32m✓[39m tests/generation.test.js[2m > [22mGeneration service[2m > [22mrejects an unknown project[32m 1[2mms[22m[39m
+ [32m✓[39m tests/generation.test.js[2m > [22mGeneration service[2m > [22mrejects evidence belonging to another project or missing evidence[32m 0[2mms[22m[39m
+ [32m✓[39m tests/generation.test.js[2m > [22mGeneration service[2m > [22mstarts generation through n8n[32m 1[2mms[22m[39m
+ [32m✓[39m tests/generation.test.js[2m > [22mGeneration service[2m > [22mmarks generation as failed when n8n request fails[32m 1[2mms[22m[39m
+ [32m✓[39m tests/generation.test.js[2m > [22mGeneration service[2m > [22msaves generated test cases and assigns sequential IDs[32m 1[2mms[22m[39m
+ [32m✓[39m tests/generation.test.js[2m > [22mGeneration service[2m > [22mrejects an invalid callback token[32m 0[2mms[22m[39m
+ [32m✓[39m tests/generation.test.js[2m > [22mGeneration service[2m > [22mrejects an expired callback token[32m 0[2mms[22m[39m
+ [32m✓[39m tests/generation.test.js[2m > [22mGeneration service[2m > [22mrejects a callback token that has already been used[32m 0[2mms[22m[39m
+ [32m✓[39m tests/evidence.signing.test.js[2m > [22mevidence signing[2m > [22mcreates a 64-character hexadecimal signature[32m 1[2mms[22m[39m
+ [32m✓[39m tests/evidence.signing.test.js[2m > [22mevidence signing[2m > [22maccepts a valid signature before expiration[32m 0[2mms[22m[39m
+ [32m✓[39m tests/evidence.signing.test.js[2m > [22mevidence signing[2m > [22mrejects a signature for a different project[32m 0[2mms[22m[39m
+ [32m✓[39m tests/evidence.signing.test.js[2m > [22mevidence signing[2m > [22mrejects a signature for different evidence[32m 0[2mms[22m[39m
+ [32m✓[39m tests/evidence.signing.test.js[2m > [22mevidence signing[2m > [22mrejects an expired signature[32m 0[2mms[22m[39m
+ [32m✓[39m tests/evidence.signing.test.js[2m > [22mevidence signing[2m > [22mrejects a malformed signature[32m 0[2mms[22m[39m
+ [32m✓[39m tests/evidence.signing.test.js[2m > [22mevidence signing[2m > [22mrejects a malformed expiration timestamp[32m 0[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m9 passed[39m[22m[90m (9)[39m
+[2m      Tests [22m [1m[32m118 passed[39m[22m[90m (118)[39m
+[2m   Start at [22m 17:34:45
+[2m   Duration [22m 6.61s[2m (transform 84ms, setup 0ms, collect 1.31s, tests 2.51s, environment 1ms, prepare 407ms)[22m
+

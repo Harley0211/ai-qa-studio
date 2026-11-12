@@ -44,6 +44,7 @@ export default function EvidenceTab() {
   const [preview, setPreview] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [runId, setRunId] = useState(null);
+  const [generationFormat, setGenerationFormat] = useState("OVERALL");
 
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -121,6 +122,7 @@ export default function EvidenceTab() {
         message:
           "Analyze the uploaded application screenshots and generate detailed, comprehensive functional test cases. Cover visible UI elements, user interactions, validations, navigation, positive and negative scenarios, and relevant edge cases. Return clear, actionable steps and expected results.",
         evidenceIds,
+        generationFormat,
       });
 
       setRunId(result.data.id);
@@ -214,8 +216,8 @@ export default function EvidenceTab() {
       </div>
 
       <div className="mb-6 rounded-xl border border-indigo-100 bg-indigo-50 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex-1">
             <h3 className="text-sm font-semibold text-slate-900">
               Generate test cases
             </h3>
@@ -223,6 +225,30 @@ export default function EvidenceTab() {
               Analyze your uploaded screenshots with AI and create test cases.
               Maximum 20 images per generation.
             </p>
+
+            <div className="mt-3 max-w-md">
+              <label
+                htmlFor="generation-format"
+                className="mb-1 block text-sm font-medium text-slate-700"
+              >
+                Expected result format
+              </label>
+              <select
+                id="generation-format"
+                value={generationFormat}
+                onChange={(event) => setGenerationFormat(event.target.value)}
+                disabled={isGenerating}
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+              >
+                <option value="OVERALL">Overall Expected Result</option>
+                <option value="PER_STEP">Expected Result Per Step</option>
+              </select>
+              <p className="mt-1 text-xs text-slate-500">
+                {generationFormat === "OVERALL"
+                  ? "One expected result for the entire test case."
+                  : "A separate expected result for every test step."}
+              </p>
+            </div>
           </div>
 
           <Button

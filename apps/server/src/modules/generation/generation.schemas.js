@@ -3,6 +3,7 @@ import { z } from "zod";
 export const generateTestCasesSchema = z.object({
   message: z.string().trim().min(1).max(5000),
   evidenceIds: z.array(z.string().min(1)).max(20).default([]),
+  generationFormat: z.enum(["OVERALL", "PER_STEP"]).default("OVERALL"),
 });
 
 const generatedTestCaseSchema = z
@@ -14,6 +15,11 @@ const generatedTestCaseSchema = z
       z.string().min(1),
       z.array(z.string().min(1)).min(1).max(50),
     ]),
+    stepExpectedResults: z
+      .array(z.string().trim().min(1).max(5000))
+      .min(1)
+      .max(50)
+      .optional(),
     data: z.string().max(5000).nullable().optional(),
     expectedResult: z.string().trim().min(1).max(5000),
   })

@@ -34,6 +34,7 @@ export function generationRouter({
         req.params.projectId,
         input.message,
         input.evidenceIds,
+        input.generationFormat,
       );
 
       res.status(202).json({

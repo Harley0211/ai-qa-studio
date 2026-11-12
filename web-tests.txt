@@ -1,0 +1,35 @@
+
+> @aqs/web@0.1.0 test
+> vitest run
+
+
+[1m[46m RUN [49m[22m [36mv3.2.7 [39m[90mC:/Users/DNOQA-agent/Documents/HAR/ai-qa-studio/apps/web[39m
+
+ [32m✓[39m src/lib/url.test.js [2m([22m[2m7 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m src/lib/apiClient.test.js [2m([22m[2m5 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+[90mstderr[2m | src/features/projects/ProjectWorkspace.test.jsx[2m > [22m[2mProject workspace[2m > [22m[2mshows "Project not found" for an unknown project
+[22m[39m⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+[90mstderr[2m | src/features/projects/TestCasesTab.test.jsx[2m > [22m[2mTest cases[2m > [22m[2mdisplays project-wide execution summary counts and progress
+[22m[39m⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+[90mstderr[2m | src/features/projects/ProjectsPage.test.jsx[2m > [22m[2mProjects dashboard[2m > [22m[2mshows a loading state and then the project cards
+[22m[39m⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/features/projects/ProjectsPage.test.jsx [2m([22m[2m7 tests[22m[2m)[22m[33m 871[2mms[22m[39m
+ [32m✓[39m src/features/projects/ProjectWorkspace.test.jsx [2m([22m[2m9 tests[22m[2m)[22m[33m 1783[2mms[22m[39m
+   [33m[2m✓[22m[39m Project workspace[2m > [22madds a URL and shows a success toast [33m 486[2mms[22m[39m
+   [33m[2m✓[22m[39m Project workspace[2m > [22mrejects an invalid URL client-side [33m 409[2mms[22m[39m
+   [33m[2m✓[22m[39m Project workspace[2m > [22mshows the server-side duplicate error on the URL field [33m 481[2mms[22m[39m
+ [32m✓[39m src/features/projects/TestCasesTab.test.jsx [2m([22m[2m12 tests[22m[2m)[22m[33m 5694[2mms[22m[39m
+   [33m[2m✓[22m[39m Test cases[2m > [22medits an existing test case successfully [33m 717[2mms[22m[39m
+   [33m[2m✓[22m[39m Test cases[2m > [22mcreates a test case successfully [33m 3736[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m5 passed[39m[22m[90m (5)[39m
+[2m      Tests [22m [1m[32m40 passed[39m[22m[90m (40)[39m
+[2m   Start at [22m 17:34:55
+[2m   Duration [22m 7.53s[2m (transform 212ms, setup 999ms, collect 2.05s, tests 8.36s, environment 2.97s, prepare 697ms)[22m
+
