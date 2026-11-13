@@ -3,8 +3,7 @@ import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
 import { ApiError } from "../../lib/errors.js";
 import { createEvidenceSignature } from "../evidence/evidence.signing.js";
 
-const CALLBACK_TOKEN_TTL_MS = 5 * 60 * 1000;
-
+const CALLBACK_TOKEN_TTL_MS = 30 * 60 * 1000;
 function hashToken(token) {
   return createHash("sha256").update(token).digest();
 }
