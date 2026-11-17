@@ -99,3 +99,36 @@ export function useDeleteTestCase(projectId) {
     },
   });
 }
+
+export function useBulkUpdateTestCaseStatus(projectId) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ ids, runStatus }) =>
+      api.patch(
+        `/projects/${encodeURIComponent(projectId)}/test-cases/bulk/status`,
+        { ids, runStatus },
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: testCaseKeys.all(projectId),
+      });
+    },
+  });
+}
+
+export function useBulkDeleteTestCases(projectId) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (ids) =>
+      api.delete(`/projects/${encodeURIComponent(projectId)}/test-cases/bulk`, {
+        ids,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: testCaseKeys.all(projectId),
+      });
+    },
+  });
+}

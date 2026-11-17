@@ -43,7 +43,26 @@ export const updateTestCaseStatusSchema = z
     runStatus: runStatusSchema,
   })
   .strict();
+const bulkTestCaseIdsSchema = z
+  .array(z.string().trim().min(1))
+  .min(1)
+  .max(100)
+  .refine((ids) => new Set(ids).size === ids.length, {
+    message: "Duplicate test case IDs are not allowed",
+  });
 
+export const bulkDeleteTestCasesSchema = z
+  .object({
+    ids: bulkTestCaseIdsSchema,
+  })
+  .strict();
+
+export const bulkUpdateTestCaseStatusSchema = z
+  .object({
+    ids: bulkTestCaseIdsSchema,
+    runStatus: runStatusSchema,
+  })
+  .strict();
 export const listTestCasesQuerySchema = z
   .object({
     q: z.string().trim().max(300).optional(),

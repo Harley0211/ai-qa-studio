@@ -1,8 +1,9 @@
-import { ClipboardList, Pencil, Plus, Trash2 } from "lucide-react";
+import { ClipboardList, Download, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { Button, IconButton } from "../../components/ui/Button.jsx";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog.jsx";
+import { exportTestCasesToExcel } from "./test-cases.export.js";
 import {
   EmptyState,
   ErrorState,
@@ -11,6 +12,8 @@ import {
 import { useToast } from "../../components/ui/Toast.jsx";
 import {
   useAllTestCases,
+  useBulkDeleteTestCases,
+  useBulkUpdateTestCaseStatus,
   useDeleteTestCase,
   useTestCases,
   useUpdateTestCaseStatus,
@@ -43,6 +46,11 @@ export default function TestCasesTab() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState("Passed");
+  const bulkDelete = useBulkDeleteTestCases(project.id);
+  const bulkUpdateStatus = useBulkUpdateTestCaseStatus(project.id);
 
   const filters = {
     q: search.trim(),
@@ -58,7 +66,80 @@ export default function TestCasesTab() {
   const deleteTestCase = useDeleteTestCase(project.id);
   const updateStatus = useUpdateTestCaseStatus(project.id);
   const toast = useToast();
+  function handleExport() {
+    try {
+      const selectedItems = selectedIds.size
+        ? allItems.filter((item) => selectedIds.has(item.id))
+        : allItems;
 
+      exportTestCasesToExcel(selectedItems, project.name);
+
+      toast.success(
+        selectedIds.size
+          ? `${selectedItems.length} selected test cases exported.`
+          : "All test cases exported successfully.",
+      );
+    } catch (err) {
+      toast.error(err.message || "Unable to export test cases.");
+    }
+  }
+  function toggleSelection(id) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    const visibleIds = items.map((item) => item.id);
+    const allVisibleSelected =
+      visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+
+    setSelectedIds((current) => {
+      const next = new Set(current);
+
+      if (allVisibleSelected) {
+        visibleIds.forEach((id) => next.delete(id));
+      } else {
+        visibleIds.forEach((id) => next.add(id));
+      }
+
+      return next;
+    });
+  }
+
+  async function handleBulkStatusUpdate() {
+    try {
+      await bulkUpdateStatus.mutateAsync({
+        ids: [...selectedIds],
+        runStatus: bulkStatus,
+      });
+
+      toast.success(`${selectedIds.size} test cases updated.`);
+      setSelectedIds(new Set());
+    } catch (err) {
+      toast.error(err.message || "Unable to update selected test cases.");
+    }
+  }
+
+  async function confirmBulkDelete() {
+    try {
+      await bulkDelete.mutateAsync([...selectedIds]);
+
+      toast.success(`${selectedIds.size} test cases deleted.`);
+      setSelectedIds(new Set());
+      setBulkDeleting(false);
+    } catch (err) {
+      toast.error(err.message || "Unable to delete selected test cases.");
+    }
+  }
   const items = data?.items ?? [];
   const allItems = allData?.items ?? [];
 
@@ -124,9 +205,20 @@ export default function TestCasesTab() {
           </p>
         </div>
 
-        <Button icon={Plus} onClick={openAdd}>
-          Add test case
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            icon={Download}
+            variant="secondary"
+            onClick={handleExport}
+            disabled={allItems.length === 0}
+          >
+            Export Excel
+          </Button>
+
+          <Button icon={Plus} onClick={openAdd}>
+            Add test case
+          </Button>
+        </div>
       </div>
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {[
@@ -176,6 +268,58 @@ export default function TestCasesTab() {
           {completedCount} of {totalCount} test cases executed
         </p>
       </div>
+      {selectedIds.size > 0 && (
+        <div className="mb-4 flex flex-col gap-3 rounded-xl border border-indigo-200 bg-indigo-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-indigo-900">
+              {selectedIds.size} selected
+            </span>
+
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set())}
+              className="text-xs font-medium text-indigo-700 hover:underline"
+            >
+              Clear selection
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={bulkStatus}
+              onChange={(event) => setBulkStatus(event.target.value)}
+              aria-label="Bulk execution status"
+              className="rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm"
+            >
+              {STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+
+            <Button
+              variant="secondary"
+              onClick={handleBulkStatusUpdate}
+              disabled={bulkUpdateStatus.isPending || bulkDelete.isPending}
+            >
+              {bulkUpdateStatus.isPending ? "Updating..." : "Set status"}
+            </Button>
+
+            <Button
+              variant="danger"
+              onClick={() => {
+                bulkDelete.reset();
+                setBulkDeleting(true);
+              }}
+              disabled={bulkUpdateStatus.isPending || bulkDelete.isPending}
+            >
+              <Trash2 size={16} />
+              Delete selected
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row">
         <input
           type="search"
@@ -224,10 +368,21 @@ export default function TestCasesTab() {
         />
       ) : (
         <div>
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-900">
-              Test case list
-            </h3>
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+              <input
+                type="checkbox"
+                checked={
+                  items.length > 0 &&
+                  items.every((item) => selectedIds.has(item.id))
+                }
+                onChange={toggleSelectAll}
+                aria-label="Select all visible test cases"
+                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600"
+              />
+              Select all visible
+            </label>
+
             <span className="text-xs text-slate-500">
               {data?.total ?? items.length}{" "}
               {(data?.total ?? items.length) === 1 ? "test case" : "test cases"}
@@ -241,35 +396,45 @@ export default function TestCasesTab() {
                 className="rounded-xl border border-slate-200 bg-white p-4"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-semibold text-indigo-600">
-                        {testCase.caseId}
-                      </span>
+                  <div className="flex min-w-0 flex-1 items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(testCase.id)}
+                      onChange={() => toggleSelection(testCase.id)}
+                      aria-label={`Select ${testCase.caseId}`}
+                      className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600"
+                    />
 
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                          STATUS_STYLES[testCase.runStatus] ??
-                          STATUS_STYLES["Not Run"]
-                        }`}
-                      >
-                        {testCase.runStatus}
-                      </span>
-                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold text-indigo-600">
+                          {testCase.caseId}
+                        </span>
 
-                    <h3 className="text-sm font-semibold text-slate-900">
-                      {testCase.title}
-                    </h3>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                            STATUS_STYLES[testCase.runStatus] ??
+                            STATUS_STYLES["Not Run"]
+                          }`}
+                        >
+                          {testCase.runStatus}
+                        </span>
+                      </div>
 
-                    {testCase.description && (
-                      <p className="mt-1 text-sm text-slate-600">
-                        {testCase.description}
+                      <h3 className="text-sm font-semibold text-slate-900">
+                        {testCase.title}
+                      </h3>
+
+                      {testCase.description && (
+                        <p className="mt-1 text-sm text-slate-600">
+                          {testCase.description}
+                        </p>
+                      )}
+
+                      <p className="mt-2 text-xs text-slate-400">
+                        Updated {formatDate(testCase.updatedAt)}
                       </p>
-                    )}
-
-                    <p className="mt-2 text-xs text-slate-400">
-                      Updated {formatDate(testCase.updatedAt)}
-                    </p>
+                    </div>
                   </div>
 
                   <div className="flex shrink-0 items-center gap-1">
@@ -294,7 +459,6 @@ export default function TestCasesTab() {
                     />
                   </div>
                 </div>
-
                 <div className="mt-4 flex flex-col gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
                   <details className="min-w-0 flex-1">
                     <summary className="cursor-pointer text-sm font-medium text-indigo-600 hover:text-indigo-700">
@@ -392,6 +556,17 @@ export default function TestCasesTab() {
           error={deleteTestCase.error?.message}
           onConfirm={confirmDelete}
           onCancel={() => setDeleting(null)}
+        />
+      )}
+      {bulkDeleting && (
+        <ConfirmDialog
+          title="Delete selected test cases?"
+          message={`You are about to permanently delete ${selectedIds.size} test cases. This action cannot be undone.`}
+          confirmLabel="Delete selected"
+          isPending={bulkDelete.isPending}
+          error={bulkDelete.error?.message}
+          onConfirm={confirmBulkDelete}
+          onCancel={() => setBulkDeleting(false)}
         />
       )}
     </section>

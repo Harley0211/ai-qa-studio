@@ -1,7 +1,15 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mockApi, project, renderRoute } from "../../test/utils.jsx";
+vi.mock("./test-cases.export.js", () => ({
+  exportTestCasesToExcel: vi.fn(),
+}));
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+import { exportTestCasesToExcel } from "./test-cases.export.js";
 
 const testCase = (overrides = {}) => ({
   id: "tc1",
@@ -433,5 +441,185 @@ describe("Test cases", () => {
       "aria-valuenow",
       "50",
     );
+  });
+  it("selects and deselects all visible test cases", async () => {
+    const user = userEvent.setup();
+
+    mockApi({
+      "GET /api/projects/p1": projectResponse,
+      "GET /api/projects/p1/test-cases": testCasesResponse([
+        testCase({ id: "tc1", caseId: "TC-0001", title: "Login test" }),
+        testCase({ id: "tc2", caseId: "TC-0002", title: "Logout test" }),
+      ]),
+    });
+
+    renderRoute("/projects/p1/test-cases");
+
+    await screen.findByText("Login test");
+
+    const selectAll = screen.getByRole("checkbox", {
+      name: "Select all visible test cases",
+    });
+
+    await user.click(selectAll);
+
+    expect(selectAll).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select TC-0001" }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select TC-0002" }),
+    ).toBeChecked();
+
+    await user.click(selectAll);
+
+    expect(
+      screen.getByRole("checkbox", { name: "Select TC-0001" }),
+    ).not.toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Select TC-0002" }),
+    ).not.toBeChecked();
+  });
+  it("updates the status of selected test cases", async () => {
+    const user = userEvent.setup();
+
+    const mock = mockApi({
+      "GET /api/projects/p1": projectResponse,
+      "GET /api/projects/p1/test-cases": testCasesResponse([
+        testCase({ id: "tc1", caseId: "TC-0001", title: "Login test" }),
+        testCase({ id: "tc2", caseId: "TC-0002", title: "Logout test" }),
+      ]),
+      "PATCH /api/projects/p1/test-cases/bulk/status": (call) => ({
+        updatedCount: call.body.ids.length,
+      }),
+    });
+
+    renderRoute("/projects/p1/test-cases");
+
+    await screen.findByText("Login test");
+
+    await user.click(screen.getByRole("checkbox", { name: "Select TC-0001" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select TC-0002" }));
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Bulk execution status" }),
+      "Passed",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Set status" }));
+
+    expect(
+      await screen.findByText("2 test cases updated."),
+    ).toBeInTheDocument();
+
+    expect(
+      mock.find("PATCH", "/api/projects/p1/test-cases/bulk/status")[0].body,
+    ).toEqual({
+      ids: ["tc1", "tc2"],
+      runStatus: "Passed",
+    });
+  });
+  it("deletes selected test cases after confirmation", async () => {
+    const user = userEvent.setup();
+
+    let items = [
+      testCase({ id: "tc1", caseId: "TC-0001", title: "Login test" }),
+      testCase({ id: "tc2", caseId: "TC-0002", title: "Logout test" }),
+    ];
+
+    const mock = mockApi({
+      "GET /api/projects/p1": projectResponse,
+      "GET /api/projects/p1/test-cases": () => testCasesResponse(items),
+      "DELETE /api/projects/p1/test-cases/bulk": (call) => {
+        items = items.filter((item) => !call.body.ids.includes(item.id));
+        return new Response(null, { status: 204 });
+      },
+    });
+
+    renderRoute("/projects/p1/test-cases");
+
+    await screen.findByText("Login test");
+
+    await user.click(screen.getByRole("checkbox", { name: "Select TC-0001" }));
+    await user.click(screen.getByRole("checkbox", { name: "Select TC-0002" }));
+
+    await user.click(screen.getByRole("button", { name: "Delete selected" }));
+
+    const dialog = screen.getByRole("dialog", {
+      name: "Delete selected test cases?",
+    });
+
+    await user.click(
+      within(dialog).getByRole("button", { name: "Delete selected" }),
+    );
+
+    expect(
+      await screen.findByText("2 test cases deleted."),
+    ).toBeInTheDocument();
+
+    expect(
+      mock.find("DELETE", "/api/projects/p1/test-cases/bulk")[0].body,
+    ).toEqual({
+      ids: ["tc1", "tc2"],
+    });
+
+    expect(await screen.findByText("No test cases found")).toBeInTheDocument();
+  });
+  it("exports all test cases when none are selected", async () => {
+    const user = userEvent.setup();
+
+    const items = [
+      testCase({ id: "tc1", caseId: "TC-0001", title: "Login test" }),
+      testCase({ id: "tc2", caseId: "TC-0002", title: "Logout test" }),
+    ];
+
+    mockApi({
+      "GET /api/projects/p1": projectResponse,
+      "GET /api/projects/p1/test-cases": testCasesResponse(items),
+    });
+
+    renderRoute("/projects/p1/test-cases");
+
+    await screen.findByText("Login test");
+
+    await user.click(screen.getByRole("button", { name: /export excel/i }));
+
+    expect(exportTestCasesToExcel).toHaveBeenCalledTimes(1);
+
+    const [exportedItems, exportedProjectName] =
+      exportTestCasesToExcel.mock.calls[0];
+
+    expect(exportedItems.map((item) => item.id)).toEqual(["tc1", "tc2"]);
+    expect(exportedProjectName).toBe(projectResponse.name);
+  });
+
+  it("exports only selected test cases", async () => {
+    const user = userEvent.setup();
+
+    const items = [
+      testCase({ id: "tc1", caseId: "TC-0001", title: "Login test" }),
+      testCase({ id: "tc2", caseId: "TC-0002", title: "Logout test" }),
+    ];
+
+    mockApi({
+      "GET /api/projects/p1": projectResponse,
+      "GET /api/projects/p1/test-cases": testCasesResponse(items),
+    });
+
+    renderRoute("/projects/p1/test-cases");
+
+    await screen.findByText("Login test");
+
+    await user.click(screen.getByRole("checkbox", { name: "Select TC-0002" }));
+
+    await user.click(screen.getByRole("button", { name: /export excel/i }));
+
+    expect(exportTestCasesToExcel).toHaveBeenCalledTimes(1);
+
+    const [exportedItems, exportedProjectName] =
+      exportTestCasesToExcel.mock.calls[0];
+
+    expect(exportedItems.map((item) => item.id)).toEqual(["tc2"]);
+    expect(exportedProjectName).toBe(projectResponse.name);
   });
 });

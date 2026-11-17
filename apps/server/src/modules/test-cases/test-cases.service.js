@@ -162,6 +162,69 @@ export function createTestCasesService(prisma) {
       });
     },
 
+    async bulkUpdateStatus(projectId, ids, runStatus) {
+      await assertProject(projectId);
+
+      const result = await prisma.testCase.updateMany({
+        where: {
+          projectId,
+          id: { in: ids },
+        },
+        data: { runStatus },
+      });
+
+      if (result.count !== ids.length) {
+        throw notFound("One or more test cases");
+      }
+
+      return {
+        updatedCount: result.count,
+      };
+    },
+
+    async bulkUpdateStatus(projectId, ids, runStatus) {
+      await assertProject(projectId);
+
+      return prisma.$transaction(async (tx) => {
+        const result = await tx.testCase.updateMany({
+          where: {
+            projectId,
+            id: { in: ids },
+          },
+          data: { runStatus },
+        });
+
+        if (result.count !== ids.length) {
+          throw notFound("One or more test cases");
+        }
+
+        return {
+          updatedCount: result.count,
+        };
+      });
+    },
+
+    async bulkRemove(projectId, ids) {
+      await assertProject(projectId);
+
+      return prisma.$transaction(async (tx) => {
+        const result = await tx.testCase.deleteMany({
+          where: {
+            projectId,
+            id: { in: ids },
+          },
+        });
+
+        if (result.count !== ids.length) {
+          throw notFound("One or more test cases");
+        }
+
+        return {
+          deletedCount: result.count,
+        };
+      });
+    },
+
     async remove(projectId, testCaseId) {
       const existing = await getTestCase(projectId, testCaseId);
 
