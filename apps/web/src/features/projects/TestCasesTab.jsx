@@ -1,4 +1,4 @@
-import { ClipboardList, Download, Pencil, Plus, Trash2 } from "lucide-react";
+﻿import { ClipboardList, Download, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 import { Button, IconButton } from "../../components/ui/Button.jsx";
@@ -30,7 +30,7 @@ const STATUS_STYLES = {
 };
 
 function formatDate(value) {
-  if (!value) return "—";
+  if (!value) return "â€”";
 
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
@@ -477,34 +477,74 @@ export default function TestCasesTab() {
                         </div>
                       )}
 
-                      <div>
-                        <h4 className="font-semibold text-slate-700">
-                          Test steps
-                        </h4>
-                        <pre className="mt-1 whitespace-pre-wrap font-sans text-slate-600">
-                          {testCase.steps}
-                        </pre>
-                      </div>
-
-                      {testCase.data && (
+                      {Array.isArray(testCase.stepExpectedResults) &&
+                      testCase.stepExpectedResults.length > 0 ? (
                         <div>
                           <h4 className="font-semibold text-slate-700">
-                            Test data
+                            Step-by-step expected results
                           </h4>
-                          <p className="mt-1 whitespace-pre-wrap text-slate-600">
-                            {testCase.data}
-                          </p>
+                          <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+                            <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+                              <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-600">
+                                <tr>
+                                  <th className="w-[36%] border-b border-slate-200 px-3 py-2">Step</th>
+                                  <th className="w-[22%] border-b border-slate-200 px-3 py-2">Data</th>
+                                  <th className="border-b border-slate-200 px-3 py-2">Expected Result</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(Array.isArray(testCase.steps)
+                                  ? testCase.steps
+                                  : String(testCase.steps || "").split(/\r?\n/).filter(Boolean)
+                                ).map((step, index) => (
+                                  <tr key={index} className="align-top">
+                                    <td className="border-b border-slate-100 px-3 py-3 whitespace-pre-wrap text-slate-700">
+                                      {String(step).replace(/^\s*\d+[.)]\s*/, "")}
+                                    </td>
+                                    <td className="border-b border-slate-100 px-3 py-3 whitespace-pre-wrap text-slate-600">
+                                      {testCase.data || ""}
+                                    </td>
+                                    <td className="border-b border-slate-100 px-3 py-3 whitespace-pre-wrap text-slate-700">
+                                      {testCase.stepExpectedResults[index] || ""}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
-                      )}
+                      ) : (
+                        <>
+                          <div>
+                            <h4 className="font-semibold text-slate-700">
+                              Test steps
+                            </h4>
+                            <pre className="mt-1 whitespace-pre-wrap font-sans text-slate-600">
+                              {testCase.steps}
+                            </pre>
+                          </div>
 
-                      <div>
-                        <h4 className="font-semibold text-slate-700">
-                          Expected result
-                        </h4>
-                        <p className="mt-1 whitespace-pre-wrap text-slate-600">
-                          {testCase.expectedResult}
-                        </p>
-                      </div>
+                          {testCase.data && (
+                            <div>
+                              <h4 className="font-semibold text-slate-700">
+                                Test data
+                              </h4>
+                              <p className="mt-1 whitespace-pre-wrap text-slate-600">
+                                {testCase.data}
+                              </p>
+                            </div>
+                          )}
+
+                          <div>
+                            <h4 className="font-semibold text-slate-700">
+                              Expected result
+                            </h4>
+                            <p className="mt-1 whitespace-pre-wrap text-slate-600">
+                              {testCase.expectedResult}
+                            </p>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </details>
 
@@ -550,7 +590,7 @@ export default function TestCasesTab() {
       {deleting && (
         <ConfirmDialog
           title="Delete test case?"
-          message={`${deleting.caseId} — ${deleting.title} will be permanently removed from this project.`}
+          message={`${deleting.caseId} â€” ${deleting.title} will be permanently removed from this project.`}
           confirmLabel="Delete test case"
           isPending={deleteTestCase.isPending}
           error={deleteTestCase.error?.message}
@@ -572,3 +612,7 @@ export default function TestCasesTab() {
     </section>
   );
 }
+
+
+
+

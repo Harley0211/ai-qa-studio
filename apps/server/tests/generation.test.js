@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+﻿import { describe, it, expect, vi } from "vitest";
 import { createGenerationService } from "../src/modules/generation/generation.service.js";
 const generationConfig = {
   evidenceSigningSecret: "test-evidence-signing-secret-32-characters",
@@ -247,6 +247,40 @@ describe("Generation service", () => {
     expect(prisma.getRun().callbackTokenHash).toBeNull();
   });
 
+  it("saves per-step results without an overall expected result", async () => {
+    const prisma = createPrismaMock();
+    const service = createGenerationService({ prisma });
+
+    const { callbackToken } = await service.createRun(
+      "project-1",
+      "Generate per-step test cases",
+    );
+
+    await service.completeGeneration(
+      "project-1",
+      "run-1",
+      callbackToken,
+      [
+        {
+          title: "Verify successful login",
+          steps: ["Open login page", "Enter valid credentials", "Click Login"],
+          stepExpectedResults: [
+            "The login page is displayed.",
+            "The entered credentials appear in their respective fields.",
+            "The user is redirected to the dashboard.",
+          ],
+        },
+      ],
+    );
+
+    const savedCase = prisma.tx.testCase.createMany.mock.calls[0][0].data[0];
+
+    expect(savedCase.expectedResult).toBe("");
+    expect(JSON.parse(savedCase.stepExpectedResults)).toHaveLength(3);
+    expect(JSON.parse(savedCase.stepExpectedResults)[2]).toBe(
+      "The user is redirected to the dashboard.",
+    );
+  });
   it("rejects an invalid callback token", async () => {
     const prisma = createPrismaMock();
     const service = createGenerationService({ prisma });
@@ -322,3 +356,4 @@ describe("Generation service", () => {
     });
   });
 });
+

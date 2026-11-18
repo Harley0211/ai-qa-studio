@@ -1,4 +1,4 @@
-import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
+﻿import { randomBytes, createHash, timingSafeEqual } from "node:crypto";
 
 import { ApiError } from "../../lib/errors.js";
 import { createEvidenceSignature } from "../evidence/evidence.signing.js";
@@ -258,7 +258,7 @@ export function createGenerationService({
               .join("\n")
           : testCase.steps,
         data: testCase.data ?? null,
-        expectedResult: testCase.expectedResult,
+        expectedResult: testCase.expectedResult ?? "",
         stepExpectedResults: testCase.stepExpectedResults
           ? JSON.stringify(testCase.stepExpectedResults)
           : null,
@@ -318,3 +318,4 @@ export function createGenerationService({
     return run;
   }
 }
+

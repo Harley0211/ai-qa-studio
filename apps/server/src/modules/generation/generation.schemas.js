@@ -1,4 +1,4 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 
 export const generateTestCasesSchema = z.object({
   message: z.string().trim().min(1).max(5000),
@@ -21,9 +21,18 @@ const generatedTestCaseSchema = z
       .max(50)
       .optional(),
     data: z.string().max(5000).nullable().optional(),
-    expectedResult: z.string().trim().min(1).max(5000),
+    expectedResult: z.string().trim().min(1).max(5000).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((testCase, ctx) => {
+    if (!testCase.expectedResult && !testCase.stepExpectedResults?.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["expectedResult"],
+        message: "Provide an overall expected result or step expected results",
+      });
+    }
+  });
 
 export const generationCallbackSchema = z
   .object({
