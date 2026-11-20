@@ -24,14 +24,26 @@ function normalizeSteps(steps) {
 
   return steps;
 }
+function safeParseStepExpectedResults(value) {
+  if (!value) return null;
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    // A corrupted row must not break the whole list; fall back to Overall.
+    return null;
+  }
+}
+
 function parseStepExpectedResults(testCase) {
   if (!testCase) return testCase;
 
   return {
     ...testCase,
-    stepExpectedResults: testCase.stepExpectedResults
-      ? JSON.parse(testCase.stepExpectedResults)
-      : null,
+    stepExpectedResults: safeParseStepExpectedResults(
+      testCase.stepExpectedResults,
+    ),
   };
 }
 
@@ -155,31 +167,13 @@ export function createTestCasesService(prisma) {
     async updateStatus(projectId, testCaseId, runStatus) {
       const existing = await getTestCase(projectId, testCaseId);
 
-      return prisma.testCase.update({
+      const updated = await prisma.testCase.update({
         where: { id: existing.id },
         data: { runStatus },
         select: testCaseSelect,
       });
-    },
 
-    async bulkUpdateStatus(projectId, ids, runStatus) {
-      await assertProject(projectId);
-
-      const result = await prisma.testCase.updateMany({
-        where: {
-          projectId,
-          id: { in: ids },
-        },
-        data: { runStatus },
-      });
-
-      if (result.count !== ids.length) {
-        throw notFound("One or more test cases");
-      }
-
-      return {
-        updatedCount: result.count,
-      };
+      return parseStepExpectedResults(updated);
     },
 
     async bulkUpdateStatus(projectId, ids, runStatus) {

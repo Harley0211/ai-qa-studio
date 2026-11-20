@@ -4,6 +4,7 @@ import { useOutletContext } from "react-router-dom";
 import { Button, IconButton } from "../../components/ui/Button.jsx";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog.jsx";
 import { exportTestCasesToExcel } from "./test-cases.export.js";
+import { buildStepRows, isPerStepTestCase } from "./test-cases.format.js";
 import {
   EmptyState,
   ErrorState,
@@ -28,6 +29,77 @@ const STATUS_STYLES = {
   Failed: "bg-red-100 text-red-700",
   Blocked: "bg-amber-100 text-amber-700",
 };
+
+function StepExpectedResultsTable({ testCase }) {
+  const rows = buildStepRows(testCase);
+  const missingCount = rows.filter((row) => row.missing).length;
+
+  return (
+    <>
+      {testCase.data && (
+        <div>
+          <h4 className="font-semibold text-slate-700">Test data</h4>
+          <p className="mt-1 whitespace-pre-wrap text-slate-600">
+            {testCase.data}
+          </p>
+        </div>
+      )}
+
+      <div>
+        <h4 className="font-semibold text-slate-700">
+          Step-by-step expected results
+        </h4>
+
+        {missingCount > 0 && (
+          <p
+            role="status"
+            className="mt-1 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800"
+          >
+            {missingCount === 1
+              ? "1 step has no expected result."
+              : `${missingCount} steps have no expected result.`}
+          </p>
+        )}
+
+        <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+          <table className="w-full min-w-[560px] border-collapse text-left text-sm">
+            <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-600">
+              <tr>
+                <th className="w-16 border-b border-slate-200 px-3 py-2">Step</th>
+                <th className="w-[45%] border-b border-slate-200 px-3 py-2">Action</th>
+                <th className="border-b border-slate-200 px-3 py-2">Expected result</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr
+                  key={row.number}
+                  className={`align-top ${row.missing ? "bg-amber-50/60" : ""}`}
+                >
+                  <td className="border-b border-slate-100 px-3 py-3 font-medium text-slate-500">
+                    {row.number}
+                  </td>
+                  <td className="border-b border-slate-100 px-3 py-3 whitespace-pre-wrap text-slate-700">
+                    {row.action}
+                  </td>
+                  <td className="border-b border-slate-100 px-3 py-3 whitespace-pre-wrap text-slate-700">
+                    {row.missing ? (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                        Missing expected result
+                      </span>
+                    ) : (
+                      row.expected
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  );
+}
 
 function formatDate(value) {
   if (!value) return "â€”";
@@ -419,6 +491,16 @@ export default function TestCasesTab() {
                         >
                           {testCase.runStatus}
                         </span>
+
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-xs font-medium ${
+                            isPerStepTestCase(testCase)
+                              ? "border-indigo-200 bg-indigo-50 text-indigo-700"
+                              : "border-slate-200 bg-white text-slate-600"
+                          }`}
+                        >
+                          {isPerStepTestCase(testCase) ? "Per step" : "Overall"}
+                        </span>
                       </div>
 
                       <h3 className="text-sm font-semibold text-slate-900">
@@ -477,42 +559,8 @@ export default function TestCasesTab() {
                         </div>
                       )}
 
-                      {Array.isArray(testCase.stepExpectedResults) &&
-                      testCase.stepExpectedResults.length > 0 ? (
-                        <div>
-                          <h4 className="font-semibold text-slate-700">
-                            Step-by-step expected results
-                          </h4>
-                          <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
-                            <table className="w-full min-w-[640px] border-collapse text-left text-sm">
-                              <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-600">
-                                <tr>
-                                  <th className="w-[36%] border-b border-slate-200 px-3 py-2">Step</th>
-                                  <th className="w-[22%] border-b border-slate-200 px-3 py-2">Data</th>
-                                  <th className="border-b border-slate-200 px-3 py-2">Expected Result</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {(Array.isArray(testCase.steps)
-                                  ? testCase.steps
-                                  : String(testCase.steps || "").split(/\r?\n/).filter(Boolean)
-                                ).map((step, index) => (
-                                  <tr key={index} className="align-top">
-                                    <td className="border-b border-slate-100 px-3 py-3 whitespace-pre-wrap text-slate-700">
-                                      {String(step).replace(/^\s*\d+[.)]\s*/, "")}
-                                    </td>
-                                    <td className="border-b border-slate-100 px-3 py-3 whitespace-pre-wrap text-slate-600">
-                                      {testCase.data || ""}
-                                    </td>
-                                    <td className="border-b border-slate-100 px-3 py-3 whitespace-pre-wrap text-slate-700">
-                                      {testCase.stepExpectedResults[index] || ""}
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
+                      {isPerStepTestCase(testCase) ? (
+                        <StepExpectedResultsTable testCase={testCase} />
                       ) : (
                         <>
                           <div>

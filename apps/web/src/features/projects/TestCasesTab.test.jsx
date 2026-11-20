@@ -623,3 +623,157 @@ describe("Test cases", () => {
     expect(exportedProjectName).toBe(projectResponse.name);
   });
 });
+
+describe("Test case expected result format", () => {
+  const perStepCase = (overrides = {}) =>
+    testCase({
+      id: "tc2",
+      caseId: "TC-0002",
+      title: "Per-step login",
+      expectedResult: "",
+      stepExpectedResults: [
+        "Login page is displayed.",
+        "Credentials are accepted.",
+        "Dashboard is shown.",
+      ],
+      ...overrides,
+    });
+
+  it("shows a format chip for each test case", async () => {
+    mockApi({
+      "GET /api/projects/p1": projectResponse,
+      "GET /api/projects/p1/test-cases": testCasesResponse([
+        testCase(),
+        perStepCase(),
+      ]),
+    });
+
+    renderRoute("/projects/p1/test-cases");
+
+    await screen.findByText("Per-step login");
+
+    const [overallCard, perStepCard] = screen.getAllByRole("article");
+
+    expect(within(overallCard).getByText("Overall")).toBeInTheDocument();
+    expect(within(perStepCard).getByText("Per step")).toBeInTheDocument();
+  });
+
+  it("treats legacy cases without stepExpectedResults as Overall", async () => {
+    mockApi({
+      "GET /api/projects/p1": projectResponse,
+      "GET /api/projects/p1/test-cases": testCasesResponse([
+        testCase({ stepExpectedResults: null }),
+      ]),
+    });
+
+    renderRoute("/projects/p1/test-cases");
+
+    await screen.findByText("Verify successful login");
+    expect(screen.getByText("Overall")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText("View test details"));
+
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.getByText("Test steps")).toBeInTheDocument();
+    expect(
+      screen.getByText("User is redirected to the dashboard."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows per-step expected results in a Step / Action / Expected result table", async () => {
+    mockApi({
+      "GET /api/projects/p1": projectResponse,
+      "GET /api/projects/p1/test-cases": testCasesResponse([perStepCase()]),
+    });
+
+    renderRoute("/projects/p1/test-cases");
+
+    await screen.findByText("Per-step login");
+    await userEvent.click(screen.getByText("View test details"));
+
+    const table = screen.getByRole("table");
+    const headers = within(table)
+      .getAllByRole("columnheader")
+      .map((cell) => cell.textContent);
+
+    expect(headers).toEqual(["Step", "Action", "Expected result"]);
+
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows).toHaveLength(3);
+    expect(
+      within(rows[1])
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent),
+    ).toEqual(["2", "Enter credentials", "Credentials are accepted."]);
+
+    // Test data is shown once, not repeated per row.
+    expect(
+      screen.getAllByText("Username: tester@example.com"),
+    ).toHaveLength(1);
+    expect(screen.queryByText(/no expected result/)).not.toBeInTheDocument();
+  });
+
+  it("flags steps that have no expected result", async () => {
+    mockApi({
+      "GET /api/projects/p1": projectResponse,
+      "GET /api/projects/p1/test-cases": testCasesResponse([
+        perStepCase({ stepExpectedResults: ["Login page is displayed."] }),
+      ]),
+    });
+
+    renderRoute("/projects/p1/test-cases");
+
+    await screen.findByText("Per-step login");
+    await userEvent.click(screen.getByText("View test details"));
+
+    expect(
+      screen.getByText("2 steps have no expected result."),
+    ).toBeInTheDocument();
+
+    const rows = within(screen.getByRole("table")).getAllByRole("row").slice(1);
+
+    expect(
+      within(rows[0]).queryByText("Missing expected result"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(rows[1]).getByText("Missing expected result"),
+    ).toBeInTheDocument();
+    expect(
+      within(rows[2]).getByText("Missing expected result"),
+    ).toBeInTheDocument();
+  });
+
+  it("saves edits to a per-step case without requiring an overall expected result", async () => {
+    const user = userEvent.setup();
+    let current = perStepCase();
+
+    const mock = mockApi({
+      "GET /api/projects/p1": projectResponse,
+      "GET /api/projects/p1/test-cases": () => testCasesResponse([current]),
+      "PATCH /api/projects/p1/test-cases/tc2": (call) => {
+        current = { ...current, title: call.body.title };
+        return current;
+      },
+    });
+
+    renderRoute("/projects/p1/test-cases");
+
+    await screen.findByText("Per-step login");
+    await user.click(screen.getByRole("button", { name: "Edit TC-0002" }));
+
+    const titleInput = screen.getByLabelText("Test case title");
+    await user.clear(titleInput);
+    await user.type(titleInput, "Per-step login edited");
+
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByText("Test case updated.")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Expected result is required"),
+    ).not.toBeInTheDocument();
+
+    const body = mock.find("PATCH", "/api/projects/p1/test-cases/tc2")[0].body;
+    expect(body.title).toBe("Per-step login edited");
+    expect(body).not.toHaveProperty("expectedResult");
+  });
+});

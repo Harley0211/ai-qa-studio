@@ -36,21 +36,6 @@ export function testCasesRouter({ prisma }) {
     }),
   );
 
-  // Update execution status
-  router.patch(
-    "/bulk/status",
-    asyncHandler(async (req, res) => {
-      const { ids, runStatus } = bulkUpdateTestCaseStatusSchema.parse(req.body);
-
-      const result = await service.bulkUpdateStatus(
-        req.params.projectId,
-        ids,
-        runStatus,
-      );
-
-      res.json(result);
-    }),
-  );
   // Bulk update execution status
   router.patch(
     "/bulk/status",

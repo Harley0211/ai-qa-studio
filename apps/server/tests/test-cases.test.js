@@ -425,3 +425,46 @@ describe("DELETE /api/projects/:projectId/test-cases/bulk", () => {
     expect(remaining).toBe(1);
   });
 });
+
+describe("stepExpectedResults handling", () => {
+  it("returns stepExpectedResults as an array after a status update", async () => {
+    const project = await createProject();
+    const created = await createTestCase(project.id, {
+      stepExpectedResults: ["Page opens", "Fields accept input", "Dashboard"],
+    });
+
+    const res = await api()
+      .patch(`/api/projects/${project.id}/test-cases/${created.body.id}/status`)
+      .send({ runStatus: "Passed" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.stepExpectedResults).toEqual([
+      "Page opens",
+      "Fields accept input",
+      "Dashboard",
+    ]);
+  });
+
+  it("returns null stepExpectedResults for overall test cases", async () => {
+    const project = await createProject();
+    const created = await createTestCase(project.id);
+
+    expect(created.body.stepExpectedResults).toBeNull();
+  });
+
+  it("does not fail the list when a row has corrupted stepExpectedResults", async () => {
+    const project = await createProject();
+    const created = await createTestCase(project.id);
+
+    await prisma.testCase.update({
+      where: { id: created.body.id },
+      data: { stepExpectedResults: "{not valid json" },
+    });
+
+    const res = await api().get(`/api/projects/${project.id}/test-cases`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0].stepExpectedResults).toBeNull();
+  });
+});

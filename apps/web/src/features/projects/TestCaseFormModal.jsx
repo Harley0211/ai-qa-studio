@@ -2,10 +2,14 @@ import { useState } from "react";
 import { Button } from "../../components/ui/Button.jsx";
 import { Modal } from "../../components/ui/Modal.jsx";
 import { TextField } from "../../components/ui/TextField.jsx";
+import { isPerStepTestCase } from "./test-cases.format.js";
 import { useCreateTestCase, useUpdateTestCase } from "./test-cases.hooks.js";
 
 export function TestCaseFormModal({ projectId, testCase, onClose, onSaved }) {
   const isEdit = Boolean(testCase);
+  // Per-step cases keep their results in stepExpectedResults, so the overall
+  // expected result is optional for them (generated ones store "").
+  const isPerStep = isPerStepTestCase(testCase);
 
   const [values, setValues] = useState({
     title: testCase?.title ?? "",
@@ -43,7 +47,7 @@ export function TestCaseFormModal({ projectId, testCase, onClose, onSaved }) {
       next.steps = "At least one test step is required";
     }
 
-    if (!values.expectedResult.trim()) {
+    if (!isPerStep && !values.expectedResult.trim()) {
       next.expectedResult = "Expected result is required";
     }
 
@@ -62,6 +66,11 @@ export function TestCaseFormModal({ projectId, testCase, onClose, onSaved }) {
       data: values.data.trim() || null,
       expectedResult: values.expectedResult.trim(),
     };
+
+    // The API rejects a blank expectedResult; for per-step cases leave it as is.
+    if (isPerStep && !payload.expectedResult) {
+      delete payload.expectedResult;
+    }
 
     try {
       const saved = isEdit
@@ -144,6 +153,11 @@ export function TestCaseFormModal({ projectId, testCase, onClose, onSaved }) {
           value={values.expectedResult}
           onChange={set("expectedResult")}
           error={errors.expectedResult}
+          hint={
+            isPerStep
+              ? "Optional. This case uses per-step expected results."
+              : undefined
+          }
           placeholder="Describe the expected outcome"
         />
 
