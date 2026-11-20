@@ -1,7 +1,7 @@
 import { ChevronDown, FileText, FlaskConical, FolderKanban, Image, Menu, Sparkles, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, matchPath, useLocation } from 'react-router-dom';
-import { IMAGE_TOOL_PATH, imageToolHref } from '../../features/tools/paths.js';
+import { IMAGE_TOOL_PATH, PRD_TOOL_PATH, imageToolHref, prdToolHref } from '../../features/tools/paths.js';
 import { useTheme } from '../../lib/theme.js';
 import { IconButton } from '../ui/Button.jsx';
 import { BackendStatus } from './BackendStatus.jsx';
@@ -28,6 +28,7 @@ function ToolsNav({ pathname }) {
   // Inside a project, open the tool for that project.
   const projectId = matchPath('/projects/:projectId/*', pathname)?.params.projectId;
   const imageToolTo = projectId ? imageToolHref(projectId) : IMAGE_TOOL_PATH;
+  const prdToolTo = projectId ? prdToolHref(projectId) : PRD_TOOL_PATH;
 
   return (
     <div className="pt-3">
@@ -49,14 +50,10 @@ function ToolsNav({ pathname }) {
             <Image className="h-4 w-4" aria-hidden="true" />
             From image evidence
           </NavLink>
-          <span
-            aria-disabled="true"
-            className="flex cursor-not-allowed items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-400"
-          >
+          <NavLink to={prdToolTo} className={navLinkClass}>
             <FileText className="h-4 w-4" aria-hidden="true" />
-            <span className="flex-1">From PRD / document</span>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-500">Soon</span>
-          </span>
+            From PRD / document
+          </NavLink>
         </div>
       )}
     </div>

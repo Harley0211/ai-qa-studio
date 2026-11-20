@@ -15,6 +15,8 @@ const testCaseSelect = {
   createdAt: true,
   updatedAt: true,
   stepExpectedResults: true,
+  sourceSection: true,
+  sourceDocument: { select: { id: true, title: true } },
 };
 
 function normalizeSteps(steps) {
@@ -65,6 +67,7 @@ export function createTestCasesService(prisma) {
         id: testCaseId,
         projectId,
       },
+      select: testCaseSelect,
     });
 
     if (!testCase) throw notFound("Test case");

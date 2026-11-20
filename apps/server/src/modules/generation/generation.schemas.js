@@ -34,6 +34,35 @@ const generatedTestCaseSchema = z
     }
   });
 
+export const listGenerationsQuerySchema = z
+  .object({
+    review: z.literal("pending"),
+  })
+  .strict();
+
+export const acceptDraftsSchema = z
+  .object({
+    indexes: z
+      .array(z.number().int().min(0))
+      .min(1)
+      .max(100)
+      .refine((indexes) => new Set(indexes).size === indexes.length, {
+        message: "Duplicate test case selections are not allowed",
+      }),
+  })
+  .strict();
+
+// n8n error messages can be long or empty; keep a short readable reason.
+export const generationFailureSchema = z
+  .object({
+    error: z
+      .string()
+      .trim()
+      .transform((value) => value.slice(0, 400) || "Unknown error")
+      .default("Unknown error"),
+  })
+  .strict();
+
 export const generationCallbackSchema = z
   .object({
     testCases: z.array(generatedTestCaseSchema).min(1).max(100),

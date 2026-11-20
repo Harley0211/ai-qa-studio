@@ -2,7 +2,7 @@ import { ExternalLink, FileText, Image, PenLine } from 'lucide-react';
 import { Link, useOutletContext } from 'react-router-dom';
 import { formatDate } from '../../lib/format.js';
 import { safeHref } from '../../lib/url.js';
-import { imageToolHref } from '../tools/paths.js';
+import { imageToolHref, prdToolHref } from '../tools/paths.js';
 import { useAllTestCases } from './test-cases.hooks.js';
 
 const STATUSES = ['Passed', 'Failed', 'Blocked', 'Not Run'];
@@ -59,6 +59,7 @@ export default function OverviewTab() {
   const { project } = useOutletContext();
   const preview = project.urls.slice(0, 5);
   const imageCount = project.evidenceCount ?? 0;
+  const documentCount = project.documentCount ?? 0;
 
   return (
     <div className="space-y-6">
@@ -72,18 +73,18 @@ export default function OverviewTab() {
             meta={`${imageCount} ${imageCount === 1 ? 'image' : 'images'} uploaded`}
           >
             <Link to={imageToolHref(project.id)} className={primaryLink}>
-              Open tool
+              Open tool<span className="sr-only">: image evidence</span>
             </Link>
           </StartCard>
           <StartCard
             icon={FileText}
             title="From PRD / document"
-            description="Requirements become test cases."
-            meta="Coming soon"
+            description="Requirements become test cases, linked to their section."
+            meta={`${documentCount} ${documentCount === 1 ? 'document' : 'documents'} added`}
           >
-            <button type="button" disabled className={`${secondaryLink} cursor-not-allowed opacity-60`}>
-              Not available yet
-            </button>
+            <Link to={prdToolHref(project.id)} className={primaryLink}>
+              Open tool<span className="sr-only">: PRD / document</span>
+            </Link>
           </StartCard>
           <StartCard
             icon={PenLine}

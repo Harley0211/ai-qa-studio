@@ -23,6 +23,7 @@ import {
   useGenerationFlow,
 } from "./generation.hooks.js";
 import { FormatPicker } from "./GenerationOptions.jsx";
+import { PendingReviewBanner } from "./GenerationReview.jsx";
 import { validateImageFile } from "./upload.js";
 
 function formatFileSize(bytes) {
@@ -133,6 +134,8 @@ export default function EvidenceTab() {
           cases.
         </p>
       </div>
+
+      <PendingReviewBanner projectId={project.id} />
 
       <div
         onDragOver={(event) => {

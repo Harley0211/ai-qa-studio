@@ -16,7 +16,7 @@ const testCase = (id, runStatus) => ({
 
 function mockProject(items = []) {
   return mockApi({
-    "GET /api/projects/p1": project({ urls: [], urlCount: 0, evidenceCount: 3 }),
+    "GET /api/projects/p1": project({ urls: [], urlCount: 0, evidenceCount: 3, documentCount: 1 }),
     "GET /api/projects/p1/test-cases": { items, total: items.length },
   });
 }
@@ -29,11 +29,14 @@ describe("Project overview", () => {
     const section = await screen.findByRole("region", { name: "Start generating" });
 
     expect(within(section).getByText("3 images uploaded")).toBeInTheDocument();
-    expect(within(section).getByRole("link", { name: "Open tool" })).toHaveAttribute(
-      "href",
-      "/tools/image-to-test-cases?project=p1",
-    );
-    expect(within(section).getByRole("button", { name: "Not available yet" })).toBeDisabled();
+    expect(
+      within(section).getByRole("link", { name: /^Open tool\s?: image evidence$/ }),
+    ).toHaveAttribute("href", "/tools/image-to-test-cases?project=p1");
+
+    expect(within(section).getByText("1 document added")).toBeInTheDocument();
+    expect(
+      within(section).getByRole("link", { name: /^Open tool\s?: PRD \/ document$/ }),
+    ).toHaveAttribute("href", "/tools/prd-to-test-cases?project=p1");
   });
 
   it("shows an execution summary of the project's test cases", async () => {

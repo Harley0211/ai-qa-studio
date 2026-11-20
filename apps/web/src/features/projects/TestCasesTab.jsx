@@ -4,7 +4,8 @@ import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { Button, IconButton } from "../../components/ui/Button.jsx";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog.jsx";
 import { exportTestCasesToExcel } from "./test-cases.export.js";
-import { buildStepRows, isPerStepTestCase } from "./test-cases.format.js";
+import { FormatChip, SourceChip, TestCaseDetails } from "./TestCaseDetails.jsx";
+import { PendingReviewBanner } from "../evidence/GenerationReview.jsx";
 import {
   EmptyState,
   ErrorState,
@@ -30,79 +31,8 @@ const STATUS_STYLES = {
   Blocked: "bg-amber-100 text-amber-700",
 };
 
-function StepExpectedResultsTable({ testCase }) {
-  const rows = buildStepRows(testCase);
-  const missingCount = rows.filter((row) => row.missing).length;
-
-  return (
-    <>
-      {testCase.data && (
-        <div>
-          <h4 className="font-semibold text-slate-700">Test data</h4>
-          <p className="mt-1 whitespace-pre-wrap text-slate-600">
-            {testCase.data}
-          </p>
-        </div>
-      )}
-
-      <div>
-        <h4 className="font-semibold text-slate-700">
-          Step-by-step expected results
-        </h4>
-
-        {missingCount > 0 && (
-          <p
-            role="status"
-            className="mt-1 rounded-lg bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800"
-          >
-            {missingCount === 1
-              ? "1 step has no expected result."
-              : `${missingCount} steps have no expected result.`}
-          </p>
-        )}
-
-        <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
-          <table className="w-full min-w-[560px] border-collapse text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-semibold uppercase text-slate-600">
-              <tr>
-                <th className="w-16 border-b border-slate-200 px-3 py-2">Step</th>
-                <th className="w-[45%] border-b border-slate-200 px-3 py-2">Action</th>
-                <th className="border-b border-slate-200 px-3 py-2">Expected result</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr
-                  key={row.number}
-                  className={`align-top ${row.missing ? "bg-amber-50/60" : ""}`}
-                >
-                  <td className="border-b border-slate-100 px-3 py-3 font-medium text-slate-500">
-                    {row.number}
-                  </td>
-                  <td className="border-b border-slate-100 px-3 py-3 whitespace-pre-wrap text-slate-700">
-                    {row.action}
-                  </td>
-                  <td className="border-b border-slate-100 px-3 py-3 whitespace-pre-wrap text-slate-700">
-                    {row.missing ? (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                        Missing expected result
-                      </span>
-                    ) : (
-                      row.expected
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </>
-  );
-}
-
 function formatDate(value) {
-  if (!value) return "â€”";
+  if (!value) return "—";
 
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
@@ -304,6 +234,8 @@ export default function TestCasesTab() {
           </Button>
         </div>
       </div>
+      <PendingReviewBanner projectId={project.id} />
+
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {[
           { label: "Total", count: totalCount, color: "text-slate-900" },
@@ -504,15 +436,8 @@ export default function TestCasesTab() {
                           {testCase.runStatus}
                         </span>
 
-                        <span
-                          className={`rounded-full border px-2 py-0.5 text-xs font-medium ${
-                            isPerStepTestCase(testCase)
-                              ? "border-indigo-200 bg-indigo-50 text-indigo-700"
-                              : "border-slate-200 bg-white text-slate-600"
-                          }`}
-                        >
-                          {isPerStepTestCase(testCase) ? "Per step" : "Overall"}
-                        </span>
+                        <FormatChip testCase={testCase} />
+                        <SourceChip testCase={testCase} />
                       </div>
 
                       <h3 className="text-sm font-semibold text-slate-900">
@@ -559,52 +484,8 @@ export default function TestCasesTab() {
                       View test details
                     </summary>
 
-                    <div className="mt-3 space-y-3 text-sm">
-                      {testCase.precondition && (
-                        <div>
-                          <h4 className="font-semibold text-slate-700">
-                            Precondition
-                          </h4>
-                          <p className="mt-1 whitespace-pre-wrap text-slate-600">
-                            {testCase.precondition}
-                          </p>
-                        </div>
-                      )}
-
-                      {isPerStepTestCase(testCase) ? (
-                        <StepExpectedResultsTable testCase={testCase} />
-                      ) : (
-                        <>
-                          <div>
-                            <h4 className="font-semibold text-slate-700">
-                              Test steps
-                            </h4>
-                            <pre className="mt-1 whitespace-pre-wrap font-sans text-slate-600">
-                              {testCase.steps}
-                            </pre>
-                          </div>
-
-                          {testCase.data && (
-                            <div>
-                              <h4 className="font-semibold text-slate-700">
-                                Test data
-                              </h4>
-                              <p className="mt-1 whitespace-pre-wrap text-slate-600">
-                                {testCase.data}
-                              </p>
-                            </div>
-                          )}
-
-                          <div>
-                            <h4 className="font-semibold text-slate-700">
-                              Expected result
-                            </h4>
-                            <p className="mt-1 whitespace-pre-wrap text-slate-600">
-                              {testCase.expectedResult}
-                            </p>
-                          </div>
-                        </>
-                      )}
+                    <div className="mt-3">
+                      <TestCaseDetails testCase={testCase} />
                     </div>
                   </details>
 
@@ -650,7 +531,7 @@ export default function TestCasesTab() {
       {deleting && (
         <ConfirmDialog
           title="Delete test case?"
-          message={`${deleting.caseId} â€” ${deleting.title} will be permanently removed from this project.`}
+          message={`${deleting.caseId} — ${deleting.title} will be permanently removed from this project.`}
           confirmLabel="Delete test case"
           isPending={deleteTestCase.isPending}
           error={deleteTestCase.error?.message}

@@ -22,11 +22,34 @@ const projects = {
 describe("Image → Test cases tool", () => {
   it("defaults to the first project and generates with the chosen format and focus", async () => {
     const user = userEvent.setup();
+    let pending = { items: [], total: 0 };
     const mock = mockApi({
       "GET /api/projects": projects,
       "GET /api/projects/p1/evidence": evidence([image("e1", "login.png")]),
-      "POST /api/projects/p1/generations": { data: { id: "run1", status: "PENDING" } },
-      "GET /api/projects/p1/generations/run1": { data: { id: "run1", status: "SUCCEEDED" } },
+      "GET /api/projects/p1/generations?review=pending": () => pending,
+      "POST /api/projects/p1/generations": () => {
+        pending = {
+          items: [{ id: "run1", completedAt: "2026-01-01T00:00:00.000Z", draftCount: 1 }],
+          total: 1,
+        };
+        return { data: { id: "run1", status: "PENDING" } };
+      },
+      "GET /api/projects/p1/generations/run1": {
+        data: {
+          id: "run1",
+          status: "SUCCEEDED",
+          reviewStatus: "PENDING_REVIEW",
+          drafts: [
+            {
+              index: 0,
+              title: "Generated login case",
+              steps: "1. Open page",
+              expectedResult: "Page opens",
+              stepExpectedResults: null,
+            },
+          ],
+        },
+      },
     });
 
     renderRoute("/tools/image-to-test-cases");
@@ -50,10 +73,10 @@ describe("Image → Test cases tool", () => {
       "Focus especially on these test types: Functional, Negative.",
     );
 
-    expect(await screen.findByRole("link", { name: "View test cases" })).toHaveAttribute(
-      "href",
-      "/projects/p1/test-cases",
-    );
+    // Finished runs go to review instead of straight into the library.
+    expect(await screen.findByText("Test cases are ready to review.")).toBeInTheDocument();
+    expect(await screen.findByText("Generated login case")).toBeInTheDocument();
+    expect(mock.find("POST", "/api/projects/p1/generations/run1/accept")).toHaveLength(0);
   });
 
   it("uses the project from the URL and lets you switch projects", async () => {
@@ -105,7 +128,7 @@ describe("Image → Test cases tool", () => {
 });
 
 describe("Sidebar tools", () => {
-  it("links to the image tool for the current project and marks PRD as coming soon", async () => {
+  it("links both tools to the current project", async () => {
     mockApi({
       "GET /api/projects/p1": project({ urls: [], urlCount: 0 }),
       "GET /api/projects/p1/test-cases": { items: [], total: 0 },
@@ -118,9 +141,9 @@ describe("Sidebar tools", () => {
       within(sidebar).getByRole("link", { name: "From image evidence" }),
     ).toHaveAttribute("href", "/tools/image-to-test-cases?project=p1");
 
-    const prd = within(sidebar).getByText("From PRD / document");
-    expect(prd.closest("[aria-disabled]")).toHaveAttribute("aria-disabled", "true");
-    expect(within(sidebar).queryByRole("link", { name: /PRD/ })).not.toBeInTheDocument();
+    expect(
+      within(sidebar).getByRole("link", { name: "From PRD / document" }),
+    ).toHaveAttribute("href", "/tools/prd-to-test-cases?project=p1");
   });
 
   it("collapses and expands the tools group", async () => {

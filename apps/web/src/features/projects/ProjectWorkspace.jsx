@@ -60,6 +60,7 @@ export default function ProjectWorkspace() {
     { to: base, label: "Overview", end: true },
     { to: `${base}/urls`, label: "URLs" },
     { to: `${base}/evidence`, label: "Evidence" },
+    { to: `${base}/documents`, label: "Documents" },
     { to: `${base}/test-cases`, label: "Test cases" },
   ];
 

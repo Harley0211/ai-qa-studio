@@ -3,8 +3,11 @@ import { asyncHandler } from "../../lib/asyncHandler.js";
 import { ApiError } from "../../lib/errors.js";
 import { createGenerationService } from "./generation.service.js";
 import {
+  acceptDraftsSchema,
   generateTestCasesSchema,
   generationCallbackSchema,
+  generationFailureSchema,
+  listGenerationsQuerySchema,
 } from "./generation.schemas.js";
 
 export function generationRouter({
@@ -43,33 +46,66 @@ export function generationRouter({
     }),
   );
 
+  function callbackToken(req) {
+    const authorization = req.get("authorization") ?? "";
+    const tokenMatch = /^Bearer ([a-fA-F0-9]{64})$/.exec(authorization);
+
+    if (!tokenMatch) {
+      throw new ApiError(
+        401,
+        "INVALID_CALLBACK_TOKEN",
+        "A valid callback authorization token is required",
+      );
+    }
+
+    return tokenMatch[1];
+  }
+
   // Receive generated test cases from n8n.
   router.post(
     "/:runId/callback",
     asyncHandler(async (req, res) => {
-      const authorization = req.get("authorization") ?? "";
-      const tokenMatch = /^Bearer ([a-fA-F0-9]{64})$/.exec(authorization);
-
-      if (!tokenMatch) {
-        throw new ApiError(
-          401,
-          "INVALID_CALLBACK_TOKEN",
-          "A valid callback authorization token is required",
-        );
-      }
-
+      const token = callbackToken(req);
       const input = generationCallbackSchema.parse(req.body ?? {});
 
       const result = await service.completeGeneration(
         req.params.projectId,
         req.params.runId,
-        tokenMatch[1],
+        token,
         input.testCases,
       );
 
       res.status(200).json({
         data: result,
       });
+    }),
+  );
+
+  // n8n reports that the run failed, so the app can stop waiting for it.
+  router.post(
+    "/:runId/failure",
+    asyncHandler(async (req, res) => {
+      const token = callbackToken(req);
+      const { error } = generationFailureSchema.parse(req.body ?? {});
+
+      const result = await service.failGeneration(
+        req.params.projectId,
+        req.params.runId,
+        token,
+        error,
+      );
+
+      res.status(200).json({ data: result });
+    }),
+  );
+
+  // List runs whose generated test cases are waiting for review (?review=pending).
+  router.get(
+    "/",
+    asyncHandler(async (req, res) => {
+      listGenerationsQuerySchema.parse(req.query);
+
+      res.json(await service.listPendingReviews(req.params.projectId));
     }),
   );
 
@@ -82,6 +118,35 @@ export function generationRouter({
       );
 
       res.status(200).json({ data: result });
+    }),
+  );
+
+  // Save the selected drafts as test cases; the rest are discarded.
+  router.post(
+    "/:runId/accept",
+    asyncHandler(async (req, res) => {
+      const { indexes } = acceptDraftsSchema.parse(req.body ?? {});
+
+      const result = await service.acceptDrafts(
+        req.params.projectId,
+        req.params.runId,
+        indexes,
+      );
+
+      res.json({ data: result });
+    }),
+  );
+
+  // Discard all drafts without saving any.
+  router.post(
+    "/:runId/discard",
+    asyncHandler(async (req, res) => {
+      const result = await service.discardDrafts(
+        req.params.projectId,
+        req.params.runId,
+      );
+
+      res.json({ data: result });
     }),
   );
 

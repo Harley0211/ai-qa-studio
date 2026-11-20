@@ -18,6 +18,7 @@ model Project {
   evidence    Evidence[]
   testCases   TestCase[]
   generations GenerationRun[]
+  documents   Document[]
   nextTestCaseNumber Int @default(1)
 
   @@index([updatedAt])
@@ -62,8 +63,16 @@ model GenerationRun {
   callbackTokenUsedAt    DateTime?
   createdAt   DateTime  @default(now())
   completedAt DateTime?
+  // Generated cases waiting for review (JSON array). They become TestCase rows
+  // only when accepted; null once reviewed (or for runs before review existed).
+  draftTestCases String?
+  reviewedAt     DateTime?
+  // Set when the run was generated from a document section.
+  documentId     String?
+  sectionTitle   String?
 
   project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  document  Document?  @relation(fields: [documentId], references: [id], onDelete: SetNull)
   testCases TestCase[]
 
   @@index([projectId, createdAt])
@@ -85,11 +94,33 @@ model TestCase {
   runStatus      String   @default("Not Run")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  // The document section a generated case came from (null for others).
+  sourceDocumentId String?
+  sourceSection    String?
 
-  project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  generationRun GenerationRun? @relation(fields: [generationRunId], references: [id], onDelete: SetNull)
+  project        Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  generationRun  GenerationRun? @relation(fields: [generationRunId], references: [id], onDelete: SetNull)
+  sourceDocument Document?      @relation(fields: [sourceDocumentId], references: [id], onDelete: SetNull)
 
   @@unique([projectId, caseId])
   @@index([projectId, createdAt])
   @@index([generationRunId])
+  @@index([sourceDocumentId])
+}
+
+model Document {
+  id         String   @id @default(cuid())
+  projectId  String
+  title      String
+  sourceType String   // "PASTE" or "UPLOAD"
+  filename   String?
+  content    String
+  sections   String   // JSON array of { id, title, text }
+  createdAt  DateTime @default(now())
+
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  generations GenerationRun[]
+  testCases   TestCase[]
+
+  @@index([projectId, createdAt])
 }

@@ -2,7 +2,9 @@
 import { isPrismaCode, notFound } from '../../lib/errors.js';
 import { removeProjectStorage } from '../evidence/evidence.storage.js';
 
-const countSelect = { select: { urls: true, testCases: true, evidence: true } };
+const countSelect = {
+  select: { urls: true, testCases: true, evidence: true, documents: true },
+};
 
 const detailInclude = {
   urls: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] },
@@ -14,6 +16,7 @@ const withUrlCount = ({ _count, ...project }) => ({
   urlCount: _count.urls,
   testCaseCount: _count.testCases,
   evidenceCount: _count.evidence,
+  documentCount: _count.documents,
 });
 
 export function createProjectsService(prisma, storageRoot) {

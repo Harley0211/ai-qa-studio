@@ -9,7 +9,9 @@ import NotFoundPage from "./NotFoundPage.jsx";
 import EvidenceTab from "../features/evidence/EvidenceTab.jsx";
 import TestCasesTab from "../features/projects/TestCasesTab.jsx";
 import ImageToTestCasesPage from "../features/tools/ImageToTestCasesPage.jsx";
-import { IMAGE_TOOL_PATH } from "../features/tools/paths.js";
+import PrdToTestCasesPage from "../features/tools/PrdToTestCasesPage.jsx";
+import { IMAGE_TOOL_PATH, PRD_TOOL_PATH } from "../features/tools/paths.js";
+import DocumentsTab from "../features/documents/DocumentsTab.jsx";
 
 export function AppRoutes() {
   return (
@@ -20,10 +22,12 @@ export function AppRoutes() {
         <Route path="/projects/:projectId" element={<ProjectWorkspace />}>
           <Route index element={<OverviewTab />} />
           <Route path="urls" element={<UrlsTab />} />
-          <Route path="evidence" element={<EvidenceTab />} />{" "}
+          <Route path="evidence" element={<EvidenceTab />} />
+          <Route path="documents" element={<DocumentsTab />} />
           <Route path="test-cases" element={<TestCasesTab />} />
         </Route>
         <Route path={IMAGE_TOOL_PATH} element={<ImageToTestCasesPage />} />
+        <Route path={PRD_TOOL_PATH} element={<PrdToTestCasesPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

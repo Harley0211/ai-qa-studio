@@ -1,4 +1,4 @@
-import { CheckCircle2, FolderKanban, ImagePlus, Sparkles } from "lucide-react";
+import { FolderKanban, ImagePlus, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PageHeader } from "../../components/layout/PageHeader.jsx";
@@ -10,6 +10,7 @@ import {
 } from "../../components/ui/States.jsx";
 import { useToast } from "../../components/ui/Toast.jsx";
 import { FocusPicker, FormatPicker } from "../evidence/GenerationOptions.jsx";
+import { PendingReviews } from "../evidence/GenerationReview.jsx";
 import {
   MAX_GENERATION_EVIDENCE,
   buildGenerationMessage,
@@ -209,20 +210,6 @@ function ImageTool({ projectId }) {
         </p>
       )}
 
-      {generation.completed && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-emerald-50 px-4 py-3">
-          <p className="flex items-center gap-2 text-sm font-medium text-emerald-900">
-            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-            New test cases were added to the project.
-          </p>
-          <Link
-            to={`/projects/${projectId}/test-cases`}
-            className="text-sm font-medium text-indigo-600 hover:underline"
-          >
-            View test cases
-          </Link>
-        </div>
-      )}
     </div>
   );
 }
@@ -260,7 +247,12 @@ export default function ImageToTestCasesPage() {
       />
     );
   } else if (project) {
-    content = <ImageTool key={project.id} projectId={project.id} />;
+    content = (
+      <div key={project.id} className="space-y-6">
+        <PendingReviews projectId={project.id} />
+        <ImageTool projectId={project.id} />
+      </div>
+    );
   } else {
     content = <LoadingState label="Loading project..." />;
   }
