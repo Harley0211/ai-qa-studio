@@ -25,6 +25,8 @@ export function useUploadEvidence(projectId) {
       queryClient.invalidateQueries({
         queryKey: evidenceKeys.all(projectId),
       });
+      // Project cards and the overview show image counts.
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
     },
   });
 }
@@ -39,6 +41,7 @@ export function useDeleteEvidence(projectId) {
       queryClient.invalidateQueries({
         queryKey: evidenceKeys.all(projectId),
       });
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
     },
   });
 }

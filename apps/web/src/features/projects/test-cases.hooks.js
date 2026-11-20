@@ -36,6 +36,9 @@ export function useAllTestCases(projectId) {
   return useTestCases(projectId);
 }
 
+// Project cards and the overview show test case counts.
+const PROJECTS_KEY = ["projects"];
+
 export function useCreateTestCase(projectId) {
   const queryClient = useQueryClient();
 
@@ -46,6 +49,7 @@ export function useCreateTestCase(projectId) {
       queryClient.invalidateQueries({
         queryKey: testCaseKeys.all(projectId),
       });
+      queryClient.invalidateQueries({ queryKey: PROJECTS_KEY });
     },
   });
 }
@@ -96,6 +100,7 @@ export function useDeleteTestCase(projectId) {
       queryClient.invalidateQueries({
         queryKey: testCaseKeys.all(projectId),
       });
+      queryClient.invalidateQueries({ queryKey: PROJECTS_KEY });
     },
   });
 }
@@ -129,6 +134,7 @@ export function useBulkDeleteTestCases(projectId) {
       queryClient.invalidateQueries({
         queryKey: testCaseKeys.all(projectId),
       });
+      queryClient.invalidateQueries({ queryKey: PROJECTS_KEY });
     },
   });
 }

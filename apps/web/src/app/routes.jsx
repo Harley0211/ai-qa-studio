@@ -8,6 +8,8 @@ import UrlsTab from "../features/projects/UrlsTab.jsx";
 import NotFoundPage from "./NotFoundPage.jsx";
 import EvidenceTab from "../features/evidence/EvidenceTab.jsx";
 import TestCasesTab from "../features/projects/TestCasesTab.jsx";
+import ImageToTestCasesPage from "../features/tools/ImageToTestCasesPage.jsx";
+import { IMAGE_TOOL_PATH } from "../features/tools/paths.js";
 
 export function AppRoutes() {
   return (
@@ -21,6 +23,7 @@ export function AppRoutes() {
           <Route path="evidence" element={<EvidenceTab />} />{" "}
           <Route path="test-cases" element={<TestCasesTab />} />
         </Route>
+        <Route path={IMAGE_TOOL_PATH} element={<ImageToTestCasesPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

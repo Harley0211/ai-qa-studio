@@ -1,6 +1,6 @@
 ﻿import { ClipboardList, Download, Pencil, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
-import { useOutletContext } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import { Button, IconButton } from "../../components/ui/Button.jsx";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog.jsx";
 import { exportTestCasesToExcel } from "./test-cases.export.js";
@@ -112,10 +112,22 @@ function formatDate(value) {
 
 export default function TestCasesTab() {
   const { project } = useOutletContext();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [formOpen, setFormOpen] = useState(false);
+  // The Overview "Add test case" button links here with { openCreate: true }.
+  const [formOpen, setFormOpen] = useState(() =>
+    Boolean(location.state?.openCreate),
+  );
+
+  // Clear that one-time state so a refresh or Back doesn't reopen the form.
+  useEffect(() => {
+    if (location.state?.openCreate) {
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.pathname, location.state, navigate]);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [selectedIds, setSelectedIds] = useState(() => new Set());

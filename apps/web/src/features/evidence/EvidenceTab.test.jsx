@@ -79,5 +79,42 @@ describe("Evidence tab", () => {
 
     expect(request.body.evidenceIds).toEqual(["e1"]);
     expect(request.body.message).toContain("functional test cases");
+    expect(request.body.generationFormat).toBe("OVERALL");
+  });
+
+  it("sends the per-step format when that card is chosen", async () => {
+    const mock = mockApi({
+      "GET /api/projects/p1": project({ urls: [], urlCount: 0 }),
+      "GET /api/projects/p1/evidence": {
+        items: [
+          {
+            id: "e1",
+            filename: "login-page.png",
+            fileSize: 102400,
+            createdAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+        total: 1,
+      },
+      "POST /api/projects/p1/generations": { data: { id: "run1", status: "PENDING" } },
+      "GET /api/projects/p1/generations/run1": { data: { id: "run1", status: "PENDING" } },
+    });
+
+    renderRoute("/projects/p1/evidence");
+    await screen.findByText("login-page.png");
+
+    const overall = screen.getByRole("radio", { name: /Overall expected result/ });
+    const perStep = screen.getByRole("radio", { name: /Expected result per step/ });
+    expect(overall).toBeChecked();
+
+    await userEvent.click(perStep);
+    expect(perStep).toBeChecked();
+
+    await userEvent.click(screen.getByRole("button", { name: "Generate Test Cases" }));
+    await screen.findByText("Test case generation started.");
+
+    expect(
+      mock.find("POST", "/api/projects/p1/generations")[0].body.generationFormat,
+    ).toBe("PER_STEP");
   });
 });

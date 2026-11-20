@@ -64,8 +64,9 @@ export default function ProjectsPage() {
     content = (
       <>
         {!q && (
-          <dl className="mb-6 grid grid-cols-2 gap-4 sm:max-w-md">
+          <dl className="mb-6 grid grid-cols-2 gap-4 sm:max-w-2xl sm:grid-cols-3">
             <Stat label="Projects" value={data.total} />
+            <Stat label="Test cases" value={data.items.reduce((sum, p) => sum + (p.testCaseCount ?? 0), 0)} />
             <Stat label="Application URLs" value={data.items.reduce((sum, p) => sum + p.urlCount, 0)} />
           </dl>
         )}
