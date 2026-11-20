@@ -1,234 +1,264 @@
-# AI QA Studio — Phase 3 Documentation
+# AI QA Studio
 
-## Phase 3: Test Case Management and Execution Summary
+AI QA Studio is a local, single-user tool for QA work. It turns screenshots and
+requirements documents (PRDs) into test cases with a local AI model, lets you
+review them before they are saved, and then manage, run and export them per
+project.
 
-**Status:** Complete  
-**Verification:** 158 automated tests passed; production build successful  
-**Frontend:** 40 tests passed across 5 test files  
-**Backend:** 118 tests passed across 9 test files
+**Status (20 Nov 2026):** 253 automated tests pass (163 server, 90 web) and the
+production build succeeds.
 
 ---
 
-## 1. Overview
+## 1. Features
 
-Phase 3 adds a usable Test Case Management area to AI QA Studio. It allows users to review generated or manually created test cases, inspect their testing details, maintain execution statuses, search and filter the library, and monitor project-wide execution progress.
+### Projects
+- Each project keeps its own application URLs, evidence images, documents and
+  test cases.
+- The **Projects** page shows totals (projects, test cases, URLs) and, per
+  project, its URL, test case and image counts plus an **Image → test cases**
+  shortcut.
+- A project's **Overview** has three *Start generating* cards (from images, from
+  a PRD, or write manually) and an execution summary.
 
-The phase focuses on managing test cases and tracking their execution state. It does not yet introduce formal execution runs, assignments, or execution history; those are candidates for Phase 4.
+### Generate test cases from screenshots
+**Tools → From image evidence** (or *Open tool* on the Overview):
 
-## 2. Features
+1. Upload PNG, JPG or WEBP screenshots (up to 5 MB each; the first 20 are used).
+2. Choose the result format: **Overall expected result** (one per test case) or
+   **Expected result per step**.
+3. Optionally choose a focus: Functional, Negative, Boundary, Validation,
+   UI / layout.
+4. Generate. The local model takes a few minutes; the results then wait for
+   review.
 
-### 2.1 Test Case Library
+### Generate test cases from a PRD or document
+**Tools → From PRD / document**, or the project's **Documents** tab:
 
-The Test Cases tab displays the test cases associated with the selected project. It serves as the central workspace for reviewing and maintaining the project's test cases.
+1. Add a document: paste text, or upload a **.txt, .md or .pdf** file (up to
+   10 MB; PDFs need selectable text).
+2. The document is split into sections at its headings: Markdown headings
+   (`## 3.2 Purchase flow`) or numbered headings (`3.2 Purchase flow`).
+   Numbered steps such as `1. Click Login` stay inside their section.
+3. Select up to 10 sections, a focus and a result format, then generate.
+4. Each section is generated separately, so every test case is linked to the
+   section it came from (shown as *From Add-ons PRD › 3.2 Purchase flow*).
 
-### 2.2 Test Case Details
+### Review before saving
+Generated test cases are **drafts**. Nothing reaches the library until it is
+reviewed:
 
-A test case can be expanded to inspect its detailed testing information:
+- The tool pages list every batch waiting for review. All cases start selected;
+  untick the ones you don't want and click **Add N to library**, or **Discard
+  all**.
+- Test case IDs (`TC-0001`, …) are assigned only when cases are accepted, so
+  discarded drafts leave no gaps.
+- The Evidence and Test cases tabs show a banner while batches are waiting.
 
-- Case ID
-- Title
-- Description
-- Preconditions
-- Test steps
-- Test data
-- Expected result
-- Execution status
+### Test case library
+The project's **Test cases** tab:
 
-This keeps the test case's key information accessible without requiring users to leave the library.
+- Each case shows its status, a **Per step / Overall** format chip and, for
+  generated cases, the document section it came from.
+- *View test details* shows the precondition and either the overall steps and
+  expected result, or a **Step / Action / Expected result** table for per-step
+  cases. Steps without an expected result are flagged.
+- Create, edit and delete cases; set the execution status (Not Run, Passed,
+  Failed, Blocked) one by one or in bulk; search and filter by status.
+- **Export Excel** exports all or the selected cases.
+- A project-wide summary and progress bar ignore the current search and filter
+  (see [Execution progress](#6-execution-progress)).
 
-### 2.3 Create and Edit Test Cases
+### Other
+- **Dark mode:** toggle in the sidebar (or the top bar on small screens). The
+  choice is remembered; until then the app follows the operating system.
+- **Failed runs never hang:** if n8n fails it reports the error and the run is
+  marked failed within seconds. If n8n never answers, the run is marked failed
+  after 30 minutes.
 
-Users can create a test case manually and edit an existing test case through the test case form modal.
+## 2. Architecture
 
-The form validates required fields before submission. Successful creation or updates refresh the displayed test-case data.
+| Part | Technology | Location |
+|---|---|---|
+| Web app | React 18, Vite, Tailwind CSS 4, TanStack Query | `apps/web` (port 5173) |
+| API server | Express, Prisma (SQLite), zod, multer, unpdf | `apps/server` (port 4000) |
+| Generation workflow | n8n | `n8n/ai-qa-studio-generation.workflow.json` (port 5678) |
+| AI model | Ollama, `qwen3-vl:2b-instruct` | port 11434 |
 
-### 2.4 Execution Status Tracking
-
-Each test case supports the following execution statuses:
-
-| Status | Meaning |
-|---|---|
-| Not Run | The test case has not been executed yet. |
-| Passed | Actual behavior met the expected result. |
-| Failed | Actual behavior did not meet the expected result. |
-| Blocked | Execution could not be completed because of a blocker. |
-
-Users can update a test case's execution status from the library.
-
-### 2.5 Search and Filtering
-
-The library supports searching test cases and filtering by execution status. These controls help users focus on a subset of test cases.
-
-The project-wide summary is intentionally independent of the active search query and status filter. Searching or filtering changes the visible list, not the overall project metrics.
-
-### 2.6 Project-wide Execution Summary
-
-The summary displays:
-
-- Total test cases
-- Passed test cases
-- Failed test cases
-- Blocked test cases
-- Not Run test cases
-- Overall execution progress
-
-The counts are calculated from the complete, unfiltered test-case collection for the project.
-
-## 3. Execution Progress Calculation
-
-A test case is considered executed when its status is Passed, Failed, or Blocked.
+How a generation run works:
 
 ```text
-Completed = Passed + Failed + Blocked
-
-Progress (%) = (Completed / Total Test Cases) * 100
+Web app ──POST /generations──▶ Server ──webhook──▶ n8n ──▶ Ollama
+                                  ▲                  │
+                                  │  POST /callback (test cases)  ─┐
+                                  └──POST /failure  (error)    ◀──┘
 ```
 
-The result is rounded to the nearest whole percentage.
+- The server creates a run (`PENDING`) with a one-time callback token and calls
+  the n8n webhook. Evidence images are passed as short-lived signed URLs.
+- n8n asks Ollama for test cases, cleans up the answer (see
+  [n8n/README.md](n8n/README.md)) and posts the cases back. The run becomes
+  `SUCCEEDED` and its cases are stored as drafts for review.
+- If a step fails, n8n posts to `/failure` and the run becomes `FAILED` with the
+  reason. Runs whose token expires (30 minutes) are closed as failed by the
+  server.
 
-Not Run cases are excluded from the completed count. Failed and Blocked cases still count as executed because an execution attempt has taken place.
+## 3. Setup
 
-If the project has no test cases, progress is displayed as 0% to avoid division by zero.
+### Prerequisites
+- Node.js 20.12 or later
+- [n8n](https://n8n.io) running locally
+- [Ollama](https://ollama.com) with the model: `ollama pull qwen3-vl:2b-instruct`
 
-### Example
+### Steps
 
-For a project with:
+1. **Install dependencies**
 
-- 10 total test cases
-- 4 Passed
-- 1 Failed
-- 1 Blocked
-- 4 Not Run
+   ```cmd
+   npm install
+   ```
 
-The completed count is 6, and execution progress is 60%.
+2. **Configure the server.** Copy `apps/server/.env.example` to
+   `apps/server/.env` and fill in the two secrets. Generate each one with:
 
-## 4. Typical User Workflow
+   ```cmd
+   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   ```
 
-1. Open AI QA Studio.
-2. Select a project.
-3. Navigate to the project's Test Cases tab.
-4. Review the project-wide summary and execution progress.
-5. Search for a test case or filter by status when needed.
-6. Expand a test case and review its preconditions, steps, test data, and expected result.
-7. Create or edit test cases when required.
-8. Execute the test manually in the target application.
-9. Update the test case status to Passed, Failed, or Blocked.
-10. Return to the summary to review the updated project-wide progress.
+3. **Create the database** (SQLite file `apps/server/prisma/dev.db`):
 
-**Important:** The status update records the execution state. Formal execution records, actual-result fields, evidence attachments per execution, and run history are outside the Phase 3 scope.
+   ```cmd
+   npm run db:migrate
+   ```
 
-## 5. Application Behavior and UX
+4. **Set up n8n:** import the workflow, create its Header Auth credential with
+   the same value as `N8N_REQUEST_SECRET`, and activate it. Step by step:
+   [n8n/README.md](n8n/README.md).
 
-The Test Cases area includes the following user-facing states and safeguards:
+5. **Start the app** (server and web together):
 
-- Loading state while test cases are being retrieved.
-- Error state when test-case data cannot be loaded.
-- Empty state when no test cases are available.
-- Form validation for required fields.
-- Confirmation dialog before deleting a test case.
-- Toast feedback for user actions.
-- Query refresh/invalidation after relevant create, edit, delete, or status-update operations.
-- Project-wide summary sourced independently from the filtered list.
+   ```cmd
+   npm run dev
+   ```
 
-## 6. Implementation Notes
+   Open http://127.0.0.1:5173.
 
-The Phase 3 frontend work is organized around these files:
+**Windows note:** stop the dev server before `npm install` or
+`npm run db:generate`. The running server locks Prisma's engine file, and
+regeneration fails with `EPERM` otherwise.
 
-| File | Responsibility |
+### Commands
+
+| Command | What it does |
 |---|---|
-| `apps/web/src/features/projects/TestCasesTab.jsx` | Test-case library UI, summary metrics, search/filter controls, and interactions. |
-| `apps/web/src/features/projects/test-cases.hooks.js` | React Query hooks for retrieving and mutating test cases. |
-| `apps/web/src/features/projects/TestCaseFormModal.jsx` | Create/edit test-case form modal. |
-| `apps/web/src/features/projects/TestCasesTab.test.jsx` | Frontend tests for the Test Cases tab and its behavior. |
-| `apps/server/src/modules/test-cases/test-cases.service.js` | Backend test-case service. |
-| `apps/web/src/app/routes.jsx` | Frontend route registration. |
+| `npm run dev` | Starts the API server and the web app |
+| `npm test` | Runs the server tests, then the web tests |
+| `npm run test -w @aqs/server` / `-w @aqs/web` | Runs one workspace's tests |
+| `npm run build` | Production build of the web app |
+| `npm run db:migrate` | Applies database migrations (development) |
+| `npm run db:generate` | Regenerates the Prisma client |
+| `npm run db:studio` | Opens Prisma Studio to browse the database |
 
-### Unfiltered summary data
+## 4. Limits
 
-The project-wide summary uses the unfiltered test-case query through `useAllTestCases(project.id)`. The visible library can use the filtered `useTestCases` query.
+| What | Limit |
+|---|---|
+| Screenshot upload | 5 MB per image (`MAX_UPLOAD_MB`); first 20 images per run |
+| Document upload | 10 MB; up to 200,000 characters of text |
+| Pasted document | 60,000 characters |
+| Sections per generation | 10 (each section is its own run) |
+| Section text sent to the model | First 12,000 characters (longer sections are flagged) |
+| Test cases per run | 100 |
+| Waiting for n8n | 30 minutes, then the run is marked failed |
 
-This separation prevents search and status filters from changing the summary counts or progress percentage.
+## 5. API overview
 
-## 7. Test Coverage
+All routes are under `/api/projects/:projectId`.
 
-The Test Cases tab tests cover the following behaviors:
+| Method and path | Purpose |
+|---|---|
+| `GET /test-cases`, `POST /test-cases`, `PATCH`/`DELETE /test-cases/:id` | Test case library |
+| `PATCH /test-cases/:id/status`, `PATCH /test-cases/bulk/status`, `DELETE /test-cases/bulk` | Execution status and bulk actions |
+| `GET`/`POST /evidence`, `DELETE /evidence/:id` | Screenshots |
+| `GET`/`POST /documents`, `POST /documents/upload`, `GET`/`DELETE /documents/:id` | Documents (paste or upload) |
+| `POST /documents/:id/generations` | Generate from selected sections |
+| `POST /generations` | Generate from screenshots |
+| `GET /generations?review=pending` | Batches waiting for review |
+| `GET /generations/:runId` | Run status, drafts and source |
+| `POST /generations/:runId/accept`, `POST /generations/:runId/discard` | Review a batch |
+| `POST /generations/:runId/callback`, `POST /generations/:runId/failure` | Used by n8n (one-time Bearer token) |
 
-1. Displays project-wide execution summary counts and progress.
-2. Keeps the project-wide summary unchanged when searching test cases.
-3. Lists test cases.
-4. Displays the empty state.
-5. Expands test-case details.
-6. Updates execution status.
-7. Deletes a test case after confirmation.
-8. Searches test cases.
-9. Filters test cases by status.
-10. Edits an existing test case.
-11. Validates required fields when creating a test case.
-12. Creates a test case successfully.
+## 6. Execution progress
 
-## 8. Verification Results
+A test case counts as executed when its status is Passed, Failed or Blocked.
 
-The following checks completed successfully:
-
-| Verification | Result |
-|---|---:|
-| Frontend tests | 40 passed |
-| Backend tests | 118 passed |
-| Combined automated tests | 158 passed |
-| Production build | Successful |
-
-Production build output:
-
-- Vite version: 6.4.5
-- Modules transformed: 1,652
-- JavaScript bundle: 263.72 kB (80.82 kB gzip)
-- CSS bundle: 23.66 kB (5.33 kB gzip)
-
-The build command was:
-
-```cmd
-npm.cmd run build
+```text
+Completed    = Passed + Failed + Blocked
+Progress (%) = round(Completed / Total * 100)      (0% when there are no cases)
 ```
 
-The combined test command was:
+Example: 10 cases with 4 Passed, 1 Failed, 1 Blocked and 4 Not Run gives
+6 completed and 60% progress. The summary always uses the whole project, not
+the filtered list.
 
-```cmd
-npm.cmd test
-```
+## 7. Changelog
 
-The individual workspace test commands were:
+### UI/UX plan, Nov 2026
+- **Per-step expected results:** format chip on every test case; per-step cases
+  show a Step / Action / Expected result table and flag missing results;
+  per-step cases can be edited without an overall expected result.
+- **Dark mode** toggle.
+- **Phase 1 (navigation and tools):** sidebar *Tools* section; Image → Test cases
+  page with format cards and focus options; Projects page counts and shortcuts;
+  Overview *Start generating* cards and execution summary.
+- **Phase 2 (review before saving):** generated cases are drafts until accepted.
+- **Phase 3 (documents and PRDs):** Documents tab, PRD → Test cases tool, section
+  splitting, PDF upload, links from test cases back to their section.
+- **Reliability:** n8n reports failures to the app; expired runs are closed; the
+  n8n parser skips malformed cases, drops repeated titles and recovers results
+  from cut-off answers.
+- **Fixes:** status updates now return per-step results as a list; a corrupted
+  row no longer breaks the test case list; duplicated bulk-status route and
+  service code removed; broken dash character in the delete dialog; neutral
+  "file too large" message.
+- **Database migrations:** `add_generation_drafts`, `add_documents`.
 
-```cmd
-npm.cmd run test -w @aqs/web
-npm.cmd run test -w @aqs/server
-```
+### Earlier
+- Test case management: library, details, create/edit, execution status,
+  search and filter, project-wide execution summary.
+- Projects, application URLs, evidence upload, n8n generation, Excel export.
 
-## 9. Phase 3 Completion Checklist
+## 8. Tests
 
-- [x] Test Case Library
-- [x] Test Case Details
-- [x] Create and edit test cases
-- [x] Execution status tracking
-- [x] Search test cases
-- [x] Filter test cases by status
-- [x] Project-wide execution summary
-- [x] Execution progress calculation and display
-- [x] Frontend tests pass
-- [x] Backend tests pass
-- [x] Production build succeeds
+| Suite | Files | Tests |
+|---|---:|---:|
+| Server (`apps/server/tests`) | 11 | 163 |
+| Web (`apps/web/src/**/*.test.*`) | 13 | 90 |
 
-## 10. Suggested Phase 4 Scope
+Server tests run against a separate SQLite database (`test.db`) that is rebuilt
+on every run; n8n is mocked. Web tests mock the API with `mockApi` from
+`apps/web/src/test/utils.jsx`.
 
-Phase 4 can build on Phase 3 by introducing formal test execution management:
+## 9. Known limitations and next steps
 
-- Create and manage execution runs.
-- Add selected test cases to an execution run.
-- Record actual results and execution notes.
-- Attach evidence to individual execution results.
-- View execution history and reports.
+- **Documents:** scanned PDFs (no selectable text) and Word files are not
+  supported. PDFs whose headings are only bold text, without numbers, become a
+  single section.
+- **Model quality:** the small local model sometimes repeats itself or ignores
+  the requested number of cases. Exact repeats are removed; cases that say the
+  same thing with different titles must be unticked in review.
+- **Per-step results** can't be edited in the test case form yet.
+- **Not built yet:** AI chat for refining results (plan Phase 4), login and
+  accounts (plan Phase 5), and recent activity on the Overview.
+- **n8n** shows runs whose failure was reported to the app as successful
+  executions in its own list; the app shows the real outcome.
+- **Dependencies:** `npm audit` reports issues in existing packages (vitest,
+  xlsx, prisma, zod, react-router); several fixes are breaking upgrades.
 
-These are proposed next-phase items and are not included in the Phase 3 implementation.
+## 10. Security
 
----
-
-**End of Phase 3 documentation**
+- The server only listens on `127.0.0.1` and refuses to start otherwise.
+- n8n listens on all network interfaces by default. To keep it local, set
+  `N8N_LISTEN_ADDRESS=127.0.0.1` in n8n's environment.
+- Secrets live only in `apps/server/.env` (git-ignored) and in the n8n
+  credential. If a secret is ever exposed, generate a new one and update both.
