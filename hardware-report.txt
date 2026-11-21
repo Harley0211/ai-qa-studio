@@ -1,0 +1,63 @@
+﻿
+=== RAM / PC ===
+
+
+Manufacturer : ASUSTeK COMPUTER INC.
+Model        : ASUS EXPERTCENTER D701MER_D501SER
+RAM_GB       : 15.6
+
+
+
+
+
+=== CPU ===
+
+
+Name                      : Intel(R) Core(TM) i5-14500
+NumberOfCores             : 14
+NumberOfLogicalProcessors : 20
+
+
+
+
+
+=== GPU ===
+
+
+Name          : Intel(R) UHD Graphics 770
+DriverVersion : 32.0.101.7040
+
+
+
+
+
+=== NVIDIA VRAM (if NVIDIA) ===
+ERROR: The term 'nvidia-smi' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+
+=== Disk ===
+
+Name FreeGB
+---- ------
+C        17
+
+
+
+
+=== Ollama models already downloaded ===
+NAME    ID    SIZE    MODIFIED 
+
+
+=== Ollama running now ===
+NAME    ID    SIZE    PROCESSOR    CONTEXT    RUNNER    UNTIL 
+
+
+=== Ollama API reachable? ===
+
+
+=== Where n8n runs ===
+
+
+=== Can reach Ollama download hosts? ===
+ollama.com: True
+registry.ollama.ai: True
+

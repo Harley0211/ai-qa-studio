@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+﻿import { describe, it, expect, vi } from "vitest";
 import { createGenerationService } from "../src/modules/generation/generation.service.js";
 const generationConfig = {
   evidenceSigningSecret: "test-evidence-signing-secret-32-characters",
@@ -77,6 +77,25 @@ const sampleTestCases = [
     expectedResult: "An error message is displayed",
   },
 ];
+
+describe("Stale run sweep", () => {
+  it("fails every pending run whose callback token has expired", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 2 });
+    const service = createGenerationService({ prisma: { generationRun: { updateMany } } });
+
+    await service.expireStaleRuns({});
+
+    const { where, data } = updateMany.mock.calls[0][0];
+    expect(where.status).toBe("PENDING");
+    expect(where.callbackTokenExpiresAt.lt).toBeInstanceOf(Date);
+    expect(data).toMatchObject({
+      status: "FAILED",
+      callbackTokenHash: null,
+      callbackTokenExpiresAt: null,
+    });
+    expect(data.error).toMatch(/^Timed out/);
+  });
+});
 
 describe("Generation service", () => {
   it("creates a pending generation run", async () => {
@@ -212,7 +231,7 @@ describe("Generation service", () => {
     );
   });
 
-  it("saves generated test cases and assigns sequential IDs", async () => {
+  it("stores generated test cases as drafts for review instead of saving them", async () => {
     const prisma = createPrismaMock();
     const service = createGenerationService({ prisma });
 
@@ -228,25 +247,49 @@ describe("Generation service", () => {
       sampleTestCases,
     );
 
-    expect(result.status).toBe("SUCCEEDED");
-    expect(result.createdCount).toBe(2);
+    expect(result).toEqual({ runId: "run-1", status: "SUCCEEDED", draftCount: 2 });
+    expect(prisma.tx.testCase.createMany).not.toHaveBeenCalled();
+    expect(prisma.tx.project.update).not.toHaveBeenCalled();
 
-    const savedCases = prisma.tx.testCase.createMany.mock.calls[0][0].data;
-
-    expect(savedCases.map((item) => item.caseId)).toEqual([
-      "TC-0001",
-      "TC-0002",
-    ]);
-
-    expect(savedCases[0].steps).toBe(
-      "1. Open login page\n2. Enter valid credentials\n3. Click Login",
-    );
-
-    expect(savedCases[0].runStatus).toBe("Not Run");
+    expect(JSON.parse(prisma.getRun().draftTestCases)).toEqual(sampleTestCases);
     expect(prisma.getRun().status).toBe("SUCCEEDED");
     expect(prisma.getRun().callbackTokenHash).toBeNull();
   });
 
+  it("keeps per-step results in the drafts", async () => {
+    const prisma = createPrismaMock();
+    const service = createGenerationService({ prisma });
+
+    const { callbackToken } = await service.createRun(
+      "project-1",
+      "Generate per-step test cases",
+    );
+
+    await service.completeGeneration(
+      "project-1",
+      "run-1",
+      callbackToken,
+      [
+        {
+          title: "Verify successful login",
+          steps: ["Open login page", "Enter valid credentials", "Click Login"],
+          stepExpectedResults: [
+            "The login page is displayed.",
+            "The entered credentials appear in their respective fields.",
+            "The user is redirected to the dashboard.",
+          ],
+        },
+      ],
+    );
+
+    const [draft] = JSON.parse(prisma.getRun().draftTestCases);
+
+    expect(draft.expectedResult).toBeUndefined();
+    expect(draft.stepExpectedResults).toHaveLength(3);
+    expect(draft.stepExpectedResults[2]).toBe(
+      "The user is redirected to the dashboard.",
+    );
+  });
   it("rejects an invalid callback token", async () => {
     const prisma = createPrismaMock();
     const service = createGenerationService({ prisma });
@@ -322,3 +365,4 @@ describe("Generation service", () => {
     });
   });
 });
+

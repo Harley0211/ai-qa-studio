@@ -23,6 +23,7 @@ export { prisma };
 export async function resetDb() {
   await prisma.testCase.deleteMany();
   await prisma.generationRun.deleteMany();
+  await prisma.document.deleteMany();
   await prisma.evidence.deleteMany();
   await prisma.projectURL.deleteMany();
   await prisma.project.deleteMany();

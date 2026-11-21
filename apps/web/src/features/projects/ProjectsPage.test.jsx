@@ -14,6 +14,29 @@ describe('Projects dashboard', () => {
     expect(screen.getAllByText('2 URLs').length).toBeGreaterThan(0);
   });
 
+  it('shows test case totals, per-project counts and the image tool shortcut', async () => {
+    mockApi({
+      'GET /api/projects': {
+        items: [
+          project({ id: 'p1', name: 'Alpha', urlCount: 1, testCaseCount: 11, evidenceCount: 1 }),
+          project({ id: 'p2', name: 'Beta', urlCount: 0, testCaseCount: 4, evidenceCount: 0 }),
+        ],
+        total: 2,
+      },
+    });
+    renderRoute('/projects');
+
+    const alpha = (await screen.findByRole('heading', { name: 'Alpha' })).closest('li');
+    expect(screen.getByText('Test cases').nextElementSibling).toHaveTextContent('15');
+
+    expect(within(alpha).getByText('1 URL')).toBeInTheDocument();
+    expect(within(alpha).getByText('11 test cases')).toBeInTheDocument();
+    expect(within(alpha).getByText('1 image')).toBeInTheDocument();
+    expect(
+      within(alpha).getByRole('link', { name: 'Image → test cases for Alpha' }),
+    ).toHaveAttribute('href', '/tools/image-to-test-cases?project=p1');
+  });
+
   it('shows an empty state with a call to action when there are no projects', async () => {
     mockApi({ 'GET /api/projects': { items: [], total: 0 } });
     renderRoute('/projects');

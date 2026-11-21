@@ -17,7 +17,8 @@ export function mockApi(handlers = {}) {
   const all = { 'GET /api/health': { status: 'ok', checks: { database: 'ok' } }, ...handlers };
   const fn = vi.fn(async (input, init = {}) => {
     const method = (init.method ?? 'GET').toUpperCase();
-    const call = { method, url: String(input), body: init.body ? JSON.parse(init.body) : undefined };
+    const body = init.body instanceof FormData ? init.body : init.body ? JSON.parse(init.body) : undefined;
+    const call = { method, url: String(input), body };
     calls.push(call);
     const handler = all[`${method} ${call.url}`];
     if (!handler) return apiError(404, 'NOT_FOUND', `No mock for ${method} ${call.url}`);

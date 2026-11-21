@@ -48,7 +48,7 @@ export function errorHandler(err, _req, res, _next) {
     if (err.code === 'LIMIT_FILE_SIZE') {
       status = 413;
       code = 'FILE_TOO_LARGE';
-      message = 'Image exceeds the maximum upload size';
+      message = 'File exceeds the maximum upload size';
     } else {
       status = 400;
       code = 'UPLOAD_ERROR';

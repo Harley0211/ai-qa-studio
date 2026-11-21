@@ -1,0 +1,534 @@
+{
+  "name": "AI QA Studio - Test Case Generation",
+  "nodes": [
+    {
+      "id": "f0dabf9c-9327-4868-b3bc-38fecbb5e09f",
+      "name": "Webhook",
+      "webhookId": "db5e2d5b-1b8c-4708-a92e-2f38c7b1d224",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        144
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-qa-studio/generate",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PPTA7Tlvv48ZL9Pd",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "id": "c2138c45-da19-4cc4-8df1-521013381705",
+      "name": "Validate Generation Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        144
+      ],
+      "parameters": {
+        "jsCode": "\nconst input = $input.first().json;\nconst body = input.body ?? input;\n\nconst requiredFields = [\n  \"runId\",\n  \"projectId\",\n  \"message\",\n  \"callbackUrl\",\n  \"callbackToken\",\n];\n\nfor (const field of requiredFields) {\n  if (\n    typeof body[field] !== \"string\" ||\n    body[field].trim() === \"\"\n  ) {\n    throw new Error(`Missing or invalid field: ${field}`);\n  }\n}\n\nif (\n  !Array.isArray(body.evidenceIds) ||\n  !Array.isArray(body.evidence)\n) {\n  throw new Error(\"Invalid evidence payload\");\n}\n\nfor (const item of body.evidence) {\n  if (\n    typeof item.id !== \"string\" ||\n    typeof item.url !== \"string\"\n  ) {\n    throw new Error(\"Invalid evidence item\");\n  }\n\n  const isValidUrl = /^https?:\\/\\/[^/\\s?#]+(?:[/?#]|$)/i.test(\n    item.url.trim()\n  );\n\n  if (!isValidUrl) {\n    throw new Error(\"Invalid evidence URL\");\n  }\n}\n\nconst callbackUrlIsValid =\n  /^https?:\\/\\/[^/\\s?#]+(?:[/?#]|$)/i.test(body.callbackUrl.trim());\n\nif (!callbackUrlIsValid) {\n  throw new Error(\"Invalid callback URL\");\n}\n\nreturn [\n  {\njson: {\n  runId: body.runId,\n  projectId: body.projectId,\n  message: body.message,\n  generationFormat:\n    body.generationFormat === \"PER_STEP\" ? \"PER_STEP\" : \"OVERALL\",\n  evidenceIds: body.evidenceIds,\n  evidence: body.evidence,\n  callbackUrl: body.callbackUrl,\n  callbackToken: body.callbackToken,\n},\n  },\n];\n"
+      }
+    },
+    {
+      "id": "9c1b43ae-be92-4d5d-9b7f-4854c5a2c7a5",
+      "name": "Prepare Evidence Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        144
+      ],
+      "parameters": {
+        "jsCode": "\nconst input = $input.first().json;\n\nif (!Array.isArray(input.evidence)) {\n  throw new Error(\"Evidence must be an array\");\n}\n\n// Keep one item even when no evidence was selected.\nif (input.evidence.length === 0) {\n  return [\n    {\n      json: {\n        ...input,\n        evidenceItem: null,\n        hasEvidence: false,\n      },\n    },\n  ];\n}\n\n// Create one workflow item for each evidence attachment.\nreturn input.evidence.map((evidenceItem) => ({\n  json: {\n    ...input,\n    evidenceItem,\n    hasEvidence: true,\n  },\n}));\n"
+      }
+    },
+    {
+      "id": "feb16b64-ed1b-4a70-8357-7b7cd190426b",
+      "name": "Has Evidence?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        672,
+        144
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "e3e1378d-cfde-4096-8c2a-3d578b6cc5e4",
+              "leftValue": "={{ $json.hasEvidence }}",
+              "rightValue": "Is True",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "344c0001-fe35-4f59-9fbd-3b7b219bf695",
+      "name": "Download Evidence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "onError": "continueErrorOutput",
+      "position": [
+        928,
+        64
+      ],
+      "parameters": {
+        "url": "={{ $json.evidenceItem.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "evidenceFile"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "8be8e71d-471f-4ca6-991d-df8e8783a972",
+      "name": "Collect Evidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        64
+      ],
+      "parameters": {
+        "jsCode": "\nconst items = $input.all();\n\nif (items.length === 0) {\n  return [];\n}\n\nconst firstItem = items[0];\nconst binary = {};\nconst evidenceFiles = [];\n\nitems.forEach((item, index) => {\n  const file = item.binary?.evidenceFile;\n\n  if (!file) {\n    throw new Error(\n      `Evidence file missing for item ${index + 1}`\n    );\n  }\n\n  const binaryKey = `evidence_${index + 1}`;\n\n  binary[binaryKey] = file;\n\n  evidenceFiles.push({\n    id: item.json.evidenceItem.id,\n    binaryProperty: binaryKey,\n  });\n});\n\nreturn [\n  {\n    json: {\n      ...firstItem.json,\n      evidenceFiles,\n      evidenceCount: evidenceFiles.length,\n      hasEvidence: true,\n    },\n    binary,\n  },\n];\n"
+      }
+    },
+    {
+      "id": "2cf176fe-2eeb-4321-8570-5f006bb26ae6",
+      "name": "Skip Evidence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        224
+      ],
+      "parameters": {
+        "jsCode": "\nconst item = $input.first();\n\nif (!item) {\n  throw new Error(\"No generation request received\");\n}\n\nreturn [\n  {\n    json: {\n      ...item.json,\n      evidenceFiles: [],\n      evidenceCount: 0,\n      hasEvidence: false,\n    },\n  },\n];\n"
+      }
+    },
+    {
+      "id": "c72b3bc9-6083-4438-afa5-d2b11d56d646",
+      "name": "Build Generation Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        144
+      ],
+      "parameters": {
+        "jsCode": "const item = $input.first();\n\nif (!item) {\n  throw new Error(\"No generation context received\");\n}\n\nconst evidenceFiles = item.json.evidenceFiles ?? [];\n\nreturn [\n  {\n    json: {\n      ...item.json,\n      evidenceFiles,\n      evidenceCount: evidenceFiles.length,\n      hasEvidence: evidenceFiles.length > 0,\n    },\n    binary: item.binary ?? {},\n  },\n];"
+      }
+    },
+    {
+      "id": "9debe7ef-bcb2-4ced-8fff-b7c781fef6aa",
+      "name": "Parse Generated Test Cases",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "onError": "continueErrorOutput",
+      "position": [
+        2240,
+        144
+      ],
+      "parameters": {
+        "jsCode": "const item = $input.first();\n\nif (!item) {\n  throw new Error(\"No Ollama response received\");\n}\n\nconst context = $(\"Build Generation Context\").first().json;\nconst rawText = item.json.message?.content;\n\nif (typeof rawText !== \"string\" || !rawText.trim()) {\n  throw new Error(\"Ollama response text is missing\");\n}\n\nconst cleanedText = rawText\n  .replace(/^```(?:json)?\\s*/i, \"\")\n  .replace(/\\s*```$/, \"\")\n  .trim();\n\n// When the model stops mid-answer (output limit, or stuck repeating itself),\n// the JSON is cut off. Recover every test case object that was completed\n// before the break; the incomplete last one is dropped.\nfunction salvageTestCases(text) {\n  const key = text.indexOf('\"testCases\"');\n  const start = key === -1 ? -1 : text.indexOf(\"[\", key);\n  if (start === -1) return [];\n\n  const cases = [];\n  let depth = 0;\n  let inString = false;\n  let escaped = false;\n  let objectStart = -1;\n\n  for (let i = start + 1; i < text.length; i += 1) {\n    const ch = text[i];\n\n    if (inString) {\n      if (escaped) escaped = false;\n      else if (ch === \"\\\\\") escaped = true;\n      else if (ch === '\"') inString = false;\n      continue;\n    }\n\n    if (ch === '\"') {\n      inString = true;\n    } else if (ch === \"{\") {\n      if (depth === 0) objectStart = i;\n      depth += 1;\n    } else if (ch === \"}\") {\n      depth -= 1;\n      if (depth === 0 && objectStart !== -1) {\n        try {\n          cases.push(JSON.parse(text.slice(objectStart, i + 1)));\n        } catch {\n          // Not valid on its own; leave it out.\n        }\n        objectStart = -1;\n      }\n    } else if (ch === \"]\" && depth === 0) {\n      break;\n    }\n  }\n\n  return cases;\n}\n\nlet parsed;\nlet truncated = false;\n\ntry {\n  parsed = JSON.parse(cleanedText);\n} catch (error) {\n  const salvaged = salvageTestCases(cleanedText);\n\n  if (salvaged.length === 0) {\n    throw new Error(\n      `Ollama returned invalid JSON: ${error.message}. The response may have been truncated.`\n    );\n  }\n\n  parsed = { testCases: salvaged };\n  truncated = true;\n}\n\nif (\n  !parsed ||\n  typeof parsed !== \"object\" ||\n  !Array.isArray(parsed.testCases) ||\n  parsed.testCases.length === 0\n) {\n  throw new Error(\"Ollama response must contain at least one test case\");\n}\n\nconst generationFormat =\n  context.generationFormat === \"PER_STEP\" ? \"PER_STEP\" : \"OVERALL\";\n\n// Limits enforced by the AI QA Studio callback schema. A case over a limit\n// would make the app reject the whole callback, so it is skipped here instead.\nconst MAX_CASES = 100;\nconst MAX_TITLE = 300;\nconst MAX_TEXT = 5000;\nconst MAX_STEPS = 50;\n\nfunction toText(value) {\n  if (value === undefined || value === null) return \"\";\n  if (typeof value === \"string\") return value;\n  if (typeof value === \"number\" || typeof value === \"boolean\") return String(value);\n  return JSON.stringify(value);\n}\n\n// Returns a normalized test case, or throws with the reason it can't be used.\nfunction normalizeCase(original) {\n  if (!original || typeof original !== \"object\" || Array.isArray(original)) {\n    throw new Error(\"must be an object\");\n  }\n\n  const title = typeof original.title === \"string\" ? original.title.trim() : \"\";\n  if (!title) throw new Error(\"has an invalid title\");\n  if (title.length > MAX_TITLE) {\n    throw new Error(`has a title longer than ${MAX_TITLE} characters`);\n  }\n\n  const text = {};\n  for (const field of [\"description\", \"precondition\", \"data\"]) {\n    text[field] = toText(original[field]);\n    if (text[field].length > MAX_TEXT) {\n      throw new Error(`has a ${field} longer than ${MAX_TEXT} characters`);\n    }\n  }\n\n  const steps = original.steps;\n  if (\n    !Array.isArray(steps) ||\n    steps.length === 0 ||\n    steps.length > MAX_STEPS ||\n    steps.some((step) => typeof step !== \"string\" || !step.trim())\n  ) {\n    throw new Error(\"has invalid steps\");\n  }\n\n  const base = {\n    title,\n    description: text.description,\n    precondition: text.precondition,\n    steps,\n    data: text.data,\n  };\n\n  if (generationFormat === \"PER_STEP\") {\n    // Small models sometimes add an overall expectedResult as well. It is\n    // not sent to the app for PER_STEP cases, so it is ignored.\n    const results = original.stepExpectedResults;\n    if (\n      !Array.isArray(results) ||\n      results.length !== steps.length ||\n      results.some(\n        (result) =>\n          typeof result !== \"string\" ||\n          !result.trim() ||\n          result.trim().length > MAX_TEXT\n      )\n    ) {\n      throw new Error(\"must have exactly one non-empty expected result per step\");\n    }\n\n    return { ...base, stepExpectedResults: results.map((result) => result.trim()) };\n  }\n\n  const expectedResult =\n    typeof original.expectedResult === \"string\" ? original.expectedResult.trim() : \"\";\n  if (!expectedResult || expectedResult.length > MAX_TEXT) {\n    throw new Error(\"has an invalid expected result\");\n  }\n\n  return { ...base, expectedResult };\n}\n\n// Small models sometimes repeat the same test case over and over. Titles are\n// compared ignoring case, spacing and punctuation; the first one is kept.\nfunction titleKey(title) {\n  return title.toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, \" \").trim();\n}\n\nconst normalizedTestCases = [];\nconst skipped = [];\nconst firstCaseByTitle = new Map();\n\nif (truncated) {\n  skipped.push(\"The response was cut off; the incomplete last test case was dropped\");\n}\n\nfor (const [index, original] of parsed.testCases.entries()) {\n  const caseNumber = index + 1;\n\n  if (normalizedTestCases.length >= MAX_CASES) {\n    skipped.push(`Test case ${caseNumber}: over the limit of ${MAX_CASES} test cases`);\n    continue;\n  }\n\n  try {\n    const testCase = normalizeCase(original);\n    const key = titleKey(testCase.title);\n\n    if (firstCaseByTitle.has(key)) {\n      skipped.push(`Test case ${caseNumber} duplicates test case ${firstCaseByTitle.get(key)}`);\n      continue;\n    }\n\n    firstCaseByTitle.set(key, caseNumber);\n    normalizedTestCases.push(testCase);\n  } catch (error) {\n    // Skip one malformed case instead of failing the whole batch; the user\n    // reviews the remaining cases before anything is saved.\n    skipped.push(`Test case ${caseNumber} ${error.message}`);\n  }\n}\n\nif (normalizedTestCases.length === 0) {\n  throw new Error(`Ollama returned no usable test cases. ${skipped.join(\"; \")}`);\n}\n\nreturn [\n  {\n    json: {\n      ...context,\n      testCases: normalizedTestCases,\n      testCaseCount: normalizedTestCases.length,\n      skippedCount: skipped.length,\n      skipped,\n    },\n  },\n];\n"
+      }
+    },
+    {
+      "id": "7bcca34f-4a9e-4d02-b11f-8110b3385ffe",
+      "name": "HTTP Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "onError": "continueErrorOutput",
+      "position": [
+        2464,
+        144
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Build Generation Context').first().json.callbackUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Build Generation Context').first().json.callbackToken }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  {\n    testCases: $json.testCases\n  }\n}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "fa18b50c-4828-4ed3-a1ce-22bcdc065464",
+      "name": "Check Generation Format",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1568,
+        144
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c9060cd1-b40a-450d-8172-a14f05d35a7e",
+              "leftValue": "={{ $json.generationFormat }}",
+              "rightValue": "PER_STEP",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "392f79c8-da9e-47d7-8757-36be053fa165",
+      "name": "Generate Test Cases - Overall (Ollama)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "onError": "continueErrorOutput",
+      "position": [
+        2000,
+        224
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:11434/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "=\n{{\nJSON.stringify({\n  model: \"qwen3-vl:2b-instruct\",\n  stream: false,\n  format: \"json\",\n  messages: [\n    {\n      role: \"user\",\n      content: $json.message + \"\\n\\nYou are a senior software QA analyst. Analyze the supplied application screenshots and generate up to 10 comprehensive, actionable test cases based only on available evidence. Include positive, negative, validation, and usability scenarios where supported. Do not invent unsupported functionality. Avoid duplicates. Use OVERALL expected results only. Do not include stepExpectedResults. Every field must be populated. Return only valid JSON using this structure: {\\\"testCases\\\":[{\\\"title\\\":\\\"Test case title\\\",\\\"description\\\":\\\"What this test validates\\\",\\\"precondition\\\":\\\"Required starting condition\\\",\\\"steps\\\":[\\\"Step 1\\\",\\\"Step 2\\\"],\\\"data\\\":\\\"Test data\\\",\\\"expectedResult\\\":\\\"Comprehensive expected behavior\\\"}]}\",\n      images: $json.ollamaImages ?? []\n    }\n\n  ],\n  options: {\n    temperature: 0.2,\n    num_predict: 3000,\n    num_ctx: 8192\n  }\n})\n}}\n",
+        "options": {}
+      }
+    },
+    {
+      "id": "5bf256bb-e8bc-4aae-bc27-3d1b480d291c",
+      "name": "Prepare Ollama Images",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1824,
+        224
+      ],
+      "parameters": {
+        "jsCode": "\nconst items = $input.all();\n\nif (items.length === 0) {\n  throw new Error(\"No generation context received\");\n}\n\nconst item = items[0];\nconst evidenceFiles = item.json.evidenceFiles ?? [];\nconst images = [];\n\nfor (const file of evidenceFiles) {\n  const binaryProperty = file.binaryProperty;\n\n  if (!item.binary?.[binaryProperty]) {\n    throw new Error(`Missing evidence binary: ${binaryProperty}`);\n  }\n\n  const buffer = await this.helpers.getBinaryDataBuffer(\n    0,\n    binaryProperty\n  );\n\n  images.push(buffer.toString(\"base64\"));\n}\n\nreturn [\n  {\n    json: {\n      ...item.json,\n      ollamaImages: images,\n      ollamaImageCount: images.length,\n    },\n    binary: item.binary,\n  },\n];\n"
+      }
+    },
+    {
+      "id": "b9092933-8fab-454f-a8a5-8a6cb7cabe92",
+      "name": "Generate Test Cases - Per Step (Ollama)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "onError": "continueErrorOutput",
+      "position": [
+        1984,
+        64
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:11434/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "=\n{{\nJSON.stringify({\n  model: \"qwen3-vl:2b-instruct\",\n  stream: false,\n  format: \"json\",\n  messages: [\n    {\n      role: \"user\",\n      content: $json.message + `\n\nYou are a senior software QA analyst.\n\nAnalyze all supplied application screenshots and the user's request.\n\nGenerate comprehensive, actionable test cases based only on the available evidence.\n\nReturn ONLY valid JSON using exactly this structure:\n\n{\n  \"testCases\": [\n    {\n      \"title\": \"Test case title\",\n      \"description\": \"What this test validates\",\n      \"precondition\": \"Required starting condition\",\n      \"steps\": [\n        \"Step 1\",\n        \"Step 2\",\n        \"Step 3\"\n      ],\n      \"stepExpectedResults\": [\n        \"Expected result for step 1\",\n        \"Expected result for step 2\",\n        \"Expected result for step 3\"\n      ],\n      \"data\": \"Test data\",\n      \"expectedResult\": \"Overall expected behavior\"\n    }\n  ]\n}\n\nRULES:\n\n1. Generate up to 10 relevant test cases.\n2. Include positive, negative, validation, usability, and edge-case scenarios where supported.\n3. Do not invent unsupported functionality, controls, validations, or business rules.\n4. Every test case must contain clear and actionable steps.\n5. Every step MUST have exactly one corresponding stepExpectedResults entry.\n6. The number of stepExpectedResults MUST equal the number of steps.\n7. Every stepExpectedResults entry MUST be a non-empty string.\n8. Each expected result must describe the observable application behavior after its corresponding step.\n9. Never omit stepExpectedResults.\n10. Never combine multiple step expectations into one array entry.\n11. Never omit an expected result for the final step.\n12. Include one comprehensive overall expectedResult per test case.\n13. Do not generate duplicate or substantially overlapping test cases.\n14. Do not assume features exist unless supported by the screenshots or request.\n15. If a feature cannot be verified from the available evidence, do not invent its behavior.\n16. Before returning JSON, count the steps and expected results for EVERY test case.\n17. Correct every mismatch before returning the final JSON.\n18. Return valid JSON only, without Markdown or explanations.\n\nFINAL VALIDATION:\n\nFor every test case:\n- steps.length MUST equal stepExpectedResults.length.\n- If there are 2 steps, there MUST be 2 expected results.\n- If there are 5 steps, there MUST be 5 expected results.\n- Every expected result MUST be a non-empty string.\n- Verify the entire JSON structure before responding.`,\n      images: $json.ollamaImages ?? []\n    }\n  ],\noptions: {\n  temperature: 0.2,\n  num_ctx: 8192,\n  num_predict: 3000\n\n}\n})\n}}\n",
+        "options": {
+          "timeout": 600000
+        }
+      }
+    },
+    {
+      "id": "4ea8fce6-91e9-43ee-a68b-e53df926653e",
+      "name": "Prepare Ollama Images1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1824,
+        64
+      ],
+      "parameters": {
+        "jsCode": "\nconst items = $input.all();\n\nif (items.length === 0) {\n  throw new Error(\"No generation context received\");\n}\n\nconst item = items[0];\nconst evidenceFiles = item.json.evidenceFiles ?? [];\nconst images = [];\n\nfor (const file of evidenceFiles) {\n  const binaryProperty = file.binaryProperty;\n\n  if (!item.binary?.[binaryProperty]) {\n    throw new Error(`Missing evidence binary: ${binaryProperty}`);\n  }\n\n  const buffer = await this.helpers.getBinaryDataBuffer(\n    0,\n    binaryProperty\n  );\n\n  images.push(buffer.toString(\"base64\"));\n}\n\nreturn [\n  {\n    json: {\n      ...item.json,\n      ollamaImages: images,\n      ollamaImageCount: images.length,\n    },\n    binary: item.binary,\n  },\n];\n"
+      }
+    },
+    {
+      "id": "1a336aef-41ac-4fa3-bf23-2567980d1141",
+      "name": "Report Failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "executeOnce": true,
+      "onError": "continueRegularOutput",
+      "position": [
+        2464,
+        384
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Validate Generation Request').first().json.callbackUrl.replace(/\\/callback$/, '/failure') }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Validate Generation Request').first().json.callbackToken }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { error: ($prevNode.name + ': ' + String((typeof $json.error === 'object' && $json.error !== null ? ($json.error.message || JSON.stringify($json.error)) : $json.error) || $json.message || 'Unknown error')).slice(0, 400) } }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Generation Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Generation Request": {
+      "main": [
+        [
+          {
+            "node": "Prepare Evidence Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Evidence Items": {
+      "main": [
+        [
+          {
+            "node": "Has Evidence?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Evidence?": {
+      "main": [
+        [
+          {
+            "node": "Download Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Evidence": {
+      "main": [
+        [
+          {
+            "node": "Collect Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Report Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Evidence": {
+      "main": [
+        [
+          {
+            "node": "Build Generation Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Evidence": {
+      "main": [
+        [
+          {
+            "node": "Build Generation Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Generation Context": {
+      "main": [
+        [
+          {
+            "node": "Check Generation Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Generated Test Cases": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Report Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Generation Format": {
+      "main": [
+        [
+          {
+            "node": "Prepare Ollama Images1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Ollama Images",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Test Cases - Overall (Ollama)": {
+      "main": [
+        [
+          {
+            "node": "Parse Generated Test Cases",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Report Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Ollama Images": {
+      "main": [
+        [
+          {
+            "node": "Generate Test Cases - Overall (Ollama)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Test Cases - Per Step (Ollama)": {
+      "main": [
+        [
+          {
+            "node": "Parse Generated Test Cases",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Report Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Ollama Images1": {
+      "main": [
+        [
+          {
+            "node": "Generate Test Cases - Per Step (Ollama)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Report Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  }
+}

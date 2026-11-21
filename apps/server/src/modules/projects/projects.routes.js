@@ -9,6 +9,8 @@ import {
 import { urlsRouter } from "./urls.routes.js";
 import { evidenceRouter } from "../evidence/evidence.routes.js";
 import { generationRouter } from "../generation/generation.routes.js";
+import { createGenerationService } from "../generation/generation.service.js";
+import { documentsRouter } from "../documents/documents.routes.js";
 import { testCasesRouter } from "../test-cases/test-cases.routes.js";
 
 export function projectsRouter({
@@ -80,6 +82,20 @@ export function projectsRouter({
       publicBackendUrl,
       evidenceSigningSecret,
       evidenceUrlTtlSeconds,
+    }),
+  );
+
+  router.use(
+    "/:projectId/documents",
+    documentsRouter({
+      prisma,
+      generationService: createGenerationService({
+        prisma,
+        n8nClient,
+        publicBackendUrl,
+        evidenceSigningSecret,
+        evidenceUrlTtlSeconds,
+      }),
     }),
   );
 

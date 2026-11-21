@@ -6,6 +6,8 @@ import {
   updateTestCaseSchema,
   updateTestCaseStatusSchema,
   listTestCasesQuerySchema,
+  bulkDeleteTestCasesSchema,
+  bulkUpdateTestCaseStatusSchema,
 } from "./test-cases.schemas.js";
 
 export function testCasesRouter({ prisma }) {
@@ -34,7 +36,22 @@ export function testCasesRouter({ prisma }) {
     }),
   );
 
-  // Update execution status
+  // Bulk update execution status
+  router.patch(
+    "/bulk/status",
+    asyncHandler(async (req, res) => {
+      const { ids, runStatus } = bulkUpdateTestCaseStatusSchema.parse(req.body);
+
+      const result = await service.bulkUpdateStatus(
+        req.params.projectId,
+        ids,
+        runStatus,
+      );
+
+      res.json(result);
+    }),
+  );
+  // Update individual execution status
   router.patch(
     "/:testCaseId/status",
     asyncHandler(async (req, res) => {
@@ -50,6 +67,17 @@ export function testCasesRouter({ prisma }) {
     }),
   );
 
+  // Bulk delete test cases
+  router.delete(
+    "/bulk",
+    asyncHandler(async (req, res) => {
+      const { ids } = bulkDeleteTestCasesSchema.parse(req.body);
+
+      const result = await service.bulkRemove(req.params.projectId, ids);
+
+      res.json(result);
+    }),
+  );
   // Get a single test case
   router.get(
     "/:testCaseId",

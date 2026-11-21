@@ -1,4 +1,4 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 
 export const generateTestCasesSchema = z.object({
   message: z.string().trim().min(1).max(5000),
@@ -21,7 +21,45 @@ const generatedTestCaseSchema = z
       .max(50)
       .optional(),
     data: z.string().max(5000).nullable().optional(),
-    expectedResult: z.string().trim().min(1).max(5000),
+    expectedResult: z.string().trim().min(1).max(5000).optional(),
+  })
+  .strict()
+  .superRefine((testCase, ctx) => {
+    if (!testCase.expectedResult && !testCase.stepExpectedResults?.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["expectedResult"],
+        message: "Provide an overall expected result or step expected results",
+      });
+    }
+  });
+
+export const listGenerationsQuerySchema = z
+  .object({
+    review: z.literal("pending"),
+  })
+  .strict();
+
+export const acceptDraftsSchema = z
+  .object({
+    indexes: z
+      .array(z.number().int().min(0))
+      .min(1)
+      .max(100)
+      .refine((indexes) => new Set(indexes).size === indexes.length, {
+        message: "Duplicate test case selections are not allowed",
+      }),
+  })
+  .strict();
+
+// n8n error messages can be long or empty; keep a short readable reason.
+export const generationFailureSchema = z
+  .object({
+    error: z
+      .string()
+      .trim()
+      .transform((value) => value.slice(0, 400) || "Unknown error")
+      .default("Unknown error"),
   })
   .strict();
 

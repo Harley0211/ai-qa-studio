@@ -69,6 +69,19 @@ describe('GET /api/projects', () => {
     expect(res.body.items[0].urls).toBeUndefined();
   });
 
+  it('includes test case and evidence counts', async () => {
+    const project = await createProject({ name: 'Counted' });
+    await api()
+      .post(`/api/projects/${project.id}/test-cases`)
+      .send({ title: 'T', steps: ['Open page'], expectedResult: 'Page opens' });
+
+    const list = await api().get('/api/projects');
+    expect(list.body.items[0]).toMatchObject({ testCaseCount: 1, evidenceCount: 0 });
+
+    const detail = await api().get(`/api/projects/${project.id}`);
+    expect(detail.body).toMatchObject({ testCaseCount: 1, evidenceCount: 0 });
+  });
+
   it('filters by name', async () => {
     await createProject({ name: 'Billing Portal' });
     await createProject({ name: 'Marketing Site' });

@@ -6,9 +6,8 @@ import {
   X,
   Sparkles,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useOutletContext } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
 import { Button, IconButton } from "../../components/ui/Button.jsx";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog.jsx";
 import {
@@ -18,11 +17,14 @@ import {
 } from "../../components/ui/States.jsx";
 import { useToast } from "../../components/ui/Toast.jsx";
 import { useDeleteEvidence, useEvidence, useUploadEvidence } from "./hooks.js";
-import { useGenerateTestCases, useGenerationRun } from "./generation.hooks.js";
-
-const MAX_UPLOAD_SIZE = 5 * 1024 * 1024;
-const MAX_GENERATION_EVIDENCE = 20;
-const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp"];
+import {
+  MAX_GENERATION_EVIDENCE,
+  buildGenerationMessage,
+  useGenerationFlow,
+} from "./generation.hooks.js";
+import { FormatPicker } from "./GenerationOptions.jsx";
+import { PendingReviewBanner } from "./GenerationReview.jsx";
+import { validateImageFile } from "./upload.js";
 
 function formatFileSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -43,48 +45,24 @@ export default function EvidenceTab() {
   const [dragging, setDragging] = useState(false);
   const [preview, setPreview] = useState(null);
   const [deleting, setDeleting] = useState(null);
-  const [runId, setRunId] = useState(null);
   const [generationFormat, setGenerationFormat] = useState("OVERALL");
 
-  const queryClient = useQueryClient();
   const toast = useToast();
 
   const { data, isPending, isError, error, refetch } = useEvidence(project.id);
   const uploadEvidence = useUploadEvidence(project.id);
   const deleteEvidence = useDeleteEvidence(project.id);
-  const generateTestCases = useGenerateTestCases(project.id);
-  const generation = useGenerationRun(project.id, runId);
+  const generation = useGenerationFlow(project.id);
 
   const items = data?.items ?? [];
-  const isGenerating =
-    generateTestCases.isPending ||
-    (Boolean(runId) && generation.data?.data?.status === "PENDING");
-  useEffect(() => {
-    if (generation.data?.data?.status === "SUCCEEDED" && runId) {
-      queryClient.invalidateQueries({
-        queryKey: ["test-cases", project.id],
-      });
-
-      toast.success("Test cases generated successfully.");
-      setRunId(null);
-    }
-
-    if (generation.data?.data?.status === "FAILED" && runId) {
-      toast.error(generation.data.data.error || "Test case generation failed.");
-      setRunId(null);
-    }
-  }, [generation.data, project.id, queryClient, runId, toast]);
+  const isGenerating = generation.isGenerating;
 
   async function handleFile(file) {
     if (!file) return;
 
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      toast.error("Only PNG, JPG, JPEG, and WEBP images are supported.");
-      return;
-    }
-
-    if (file.size > MAX_UPLOAD_SIZE) {
-      toast.error("Image exceeds the maximum upload size of 5 MB.");
+    const fileError = validateImageFile(file);
+    if (fileError) {
+      toast.error(fileError);
       return;
     }
 
@@ -118,14 +96,12 @@ export default function EvidenceTab() {
       .map((item) => item.id);
 
     try {
-      const result = await generateTestCases.mutateAsync({
-        message:
-          "Analyze the uploaded application screenshots and generate detailed, comprehensive functional test cases. Cover visible UI elements, user interactions, validations, navigation, positive and negative scenarios, and relevant edge cases. Return clear, actionable steps and expected results.",
+      await generation.start({
+        message: buildGenerationMessage(),
         evidenceIds,
         generationFormat,
       });
 
-      setRunId(result.data.id);
       if (items.length > MAX_GENERATION_EVIDENCE) {
         toast.success(
           `Generation started using the first ${MAX_GENERATION_EVIDENCE} images.`,
@@ -158,6 +134,8 @@ export default function EvidenceTab() {
           cases.
         </p>
       </div>
+
+      <PendingReviewBanner projectId={project.id} />
 
       <div
         onDragOver={(event) => {
@@ -226,50 +204,35 @@ export default function EvidenceTab() {
               Maximum 20 images per generation.
             </p>
 
-            <div className="mt-3 max-w-md">
-              <label
-                htmlFor="generation-format"
-                className="mb-1 block text-sm font-medium text-slate-700"
-              >
+            <div className="mt-3 max-w-xl">
+              <p className="mb-2 text-sm font-medium text-slate-700">
                 Expected result format
-              </label>
-              <select
-                id="generation-format"
-                value={generationFormat}
-                onChange={(event) => setGenerationFormat(event.target.value)}
-                disabled={isGenerating}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:cursor-not-allowed disabled:bg-slate-100"
-              >
-                <option value="OVERALL">Overall Expected Result</option>
-                <option value="PER_STEP">Expected Result Per Step</option>
-              </select>
-              <p className="mt-1 text-xs text-slate-500">
-                {generationFormat === "OVERALL"
-                  ? "One expected result for the entire test case."
-                  : "A separate expected result for every test step."}
               </p>
+              <FormatPicker
+                value={generationFormat}
+                onChange={setGenerationFormat}
+                disabled={isGenerating}
+              />
             </div>
           </div>
 
           <Button
             icon={Sparkles}
             loading={isGenerating}
-            disabled={
-              items.length === 0 || isGenerating || generateTestCases.isPending
-            }
+            disabled={items.length === 0 || isGenerating}
             onClick={handleGenerate}
           >
             Generate Test Cases
           </Button>
         </div>
 
-        {runId && generation.data?.data?.status === "PENDING" && (
+        {generation.isWaiting && (
           <p role="status" className="mt-3 text-sm text-indigo-700">
             AI is analyzing your evidence. This may take a few minutes...
           </p>
         )}
 
-        {generation.isError && runId && (
+        {generation.statusError && (
           <p role="alert" className="mt-3 text-sm text-red-600">
             Unable to check generation status. Please refresh and check your
             Test Cases tab.

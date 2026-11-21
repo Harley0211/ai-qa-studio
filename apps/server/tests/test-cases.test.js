@@ -295,3 +295,176 @@ describe("DELETE /api/projects/:projectId/test-cases/:testCaseId", () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe("PATCH /api/projects/:projectId/test-cases/bulk/status", () => {
+  it("updates the status of multiple test cases", async () => {
+    const project = await createProject();
+
+    const first = await createTestCase(project.id);
+    const second = await createTestCase(project.id, {
+      title: "Verify logout",
+    });
+
+    const res = await api()
+      .patch(`/api/projects/${project.id}/test-cases/bulk/status`)
+      .send({
+        ids: [first.body.id, second.body.id],
+        runStatus: "Passed",
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.updatedCount).toBe(2);
+
+    const updated = await prisma.testCase.findMany({
+      where: { projectId: project.id },
+      orderBy: { caseId: "asc" },
+    });
+
+    expect(updated.map((item) => item.runStatus)).toEqual(["Passed", "Passed"]);
+  });
+
+  it("rejects an empty selection", async () => {
+    const project = await createProject();
+
+    const res = await api()
+      .patch(`/api/projects/${project.id}/test-cases/bulk/status`)
+      .send({
+        ids: [],
+        runStatus: "Passed",
+      });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects an unsupported status", async () => {
+    const project = await createProject();
+    const created = await createTestCase(project.id);
+
+    const res = await api()
+      .patch(`/api/projects/${project.id}/test-cases/bulk/status`)
+      .send({
+        ids: [created.body.id],
+        runStatus: "Skipped",
+      });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("does not update records when any selected ID is invalid", async () => {
+    const project = await createProject();
+    const created = await createTestCase(project.id);
+
+    const res = await api()
+      .patch(`/api/projects/${project.id}/test-cases/bulk/status`)
+      .send({
+        ids: [created.body.id, "does-not-exist"],
+        runStatus: "Passed",
+      });
+
+    expect(res.status).toBe(404);
+
+    const unchanged = await prisma.testCase.findUnique({
+      where: { id: created.body.id },
+    });
+
+    expect(unchanged.runStatus).toBe("Not Run");
+  });
+});
+
+describe("DELETE /api/projects/:projectId/test-cases/bulk", () => {
+  it("deletes multiple test cases", async () => {
+    const project = await createProject();
+
+    const first = await createTestCase(project.id);
+    const second = await createTestCase(project.id, {
+      title: "Verify logout",
+    });
+
+    const res = await api()
+      .delete(`/api/projects/${project.id}/test-cases/bulk`)
+      .send({
+        ids: [first.body.id, second.body.id],
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.deletedCount).toBe(2);
+
+    const remaining = await prisma.testCase.count({
+      where: { projectId: project.id },
+    });
+
+    expect(remaining).toBe(0);
+  });
+
+  it("rejects an empty selection", async () => {
+    const project = await createProject();
+
+    const res = await api()
+      .delete(`/api/projects/${project.id}/test-cases/bulk`)
+      .send({ ids: [] });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("does not delete records when any selected ID is invalid", async () => {
+    const project = await createProject();
+    const created = await createTestCase(project.id);
+
+    const res = await api()
+      .delete(`/api/projects/${project.id}/test-cases/bulk`)
+      .send({
+        ids: [created.body.id, "does-not-exist"],
+      });
+
+    expect(res.status).toBe(404);
+
+    const remaining = await prisma.testCase.count({
+      where: { projectId: project.id },
+    });
+
+    expect(remaining).toBe(1);
+  });
+});
+
+describe("stepExpectedResults handling", () => {
+  it("returns stepExpectedResults as an array after a status update", async () => {
+    const project = await createProject();
+    const created = await createTestCase(project.id, {
+      stepExpectedResults: ["Page opens", "Fields accept input", "Dashboard"],
+    });
+
+    const res = await api()
+      .patch(`/api/projects/${project.id}/test-cases/${created.body.id}/status`)
+      .send({ runStatus: "Passed" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.stepExpectedResults).toEqual([
+      "Page opens",
+      "Fields accept input",
+      "Dashboard",
+    ]);
+  });
+
+  it("returns null stepExpectedResults for overall test cases", async () => {
+    const project = await createProject();
+    const created = await createTestCase(project.id);
+
+    expect(created.body.stepExpectedResults).toBeNull();
+  });
+
+  it("does not fail the list when a row has corrupted stepExpectedResults", async () => {
+    const project = await createProject();
+    const created = await createTestCase(project.id);
+
+    await prisma.testCase.update({
+      where: { id: created.body.id },
+      data: { stepExpectedResults: "{not valid json" },
+    });
+
+    const res = await api().get(`/api/projects/${project.id}/test-cases`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0].stepExpectedResults).toBeNull();
+  });
+});
