@@ -23,8 +23,21 @@ It contains no secrets: credentials are referenced by name only.
 
 ## What the workflow does
 
-Webhook → validate → download evidence (if any) → Ollama (Overall or Per step
-prompt) → **Parse Generated Test Cases** → POST results to the app's callback.
+Webhook → validate → download evidence (if any) → **List Scenarios** (Ollama) →
+**Plan Scenarios** → Ollama (Overall or Per step prompt) → **Parse Generated
+Test Cases** → POST results to the app's callback.
+
+The number of test cases is not fixed; it follows the evidence:
+
+- **List Scenarios** asks the model for a short list of the distinct scenarios
+  the screenshots and request support (at most 40). A repeat penalty makes the
+  small model stop once everything shown is covered instead of padding the list.
+- **Plan Scenarios** drops reworded duplicates. If the request names a number
+  ("5 test cases", "exactly 3 tests") that number is used instead. It then
+  builds a JSON schema that requires exactly that many test cases and sizes the
+  model's output budget (`num_predict`, `num_ctx`) to match, so the model can't
+  loop or get cut off.
+- The generation prompt writes one test case per planned scenario, in order.
 
 The parser skips malformed cases, drops repeated titles, recovers the finished
 cases when the model's answer is cut off, and enforces the app's length limits.
