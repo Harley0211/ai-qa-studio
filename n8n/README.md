@@ -39,6 +39,19 @@ The number of test cases is not fixed; it follows the evidence:
   loop or get cut off.
 - The generation prompt writes one test case per planned scenario, in order.
 
+### AI chat (`mode: "REFINE"`)
+
+The app sends `mode: "REFINE"` with the batch's `currentTestCases`, the
+tester's `instruction` and earlier requests (`history`). **Is Refine?** sends
+these down a separate branch:
+
+**Build Refine Plan** → **Plan Refinement** (Ollama: which change — ADD, EDIT or
+REMOVE — and which case numbers; titles only) → **Build Refine Request** →
+**Refine Test Cases** (Ollama: writes only the rewritten and new cases; the
+schema allows exactly the planned case numbers and number of new cases) →
+**Apply Refinement** (removals by code, then rewrites and additions) → the same
+parser and callback, which also sends a short `summary` for the chat reply.
+
 The parser skips malformed cases, drops repeated titles, recovers the finished
 cases when the model's answer is cut off, and enforces the app's length limits.
 If a step fails, **Report Failure** tells the app (`/failure`) so the run is

@@ -90,6 +90,51 @@ const alreadyReviewed = () =>
     "These generated test cases have already been reviewed",
   );
 
+export const REFINE_REVIEWED_ERROR =
+  "The test cases were reviewed before this change finished, so it was not applied";
+const MAX_REFINE_HISTORY = 6;
+
+// Drafts as n8n expects them: steps as a list. Older drafts may hold steps as
+// numbered text ("1. Open...\n2. Click..."), so those are split back up.
+function toN8nDraft(draft) {
+  const steps = Array.isArray(draft.steps)
+    ? draft.steps
+    : String(draft.steps ?? "")
+        .split(/\r?\n/)
+        .map((line) => line.replace(/^\s*\d+[.)]\s*/, "").trim())
+        .filter(Boolean);
+
+  return {
+    title: draft.title,
+    description: draft.description ?? "",
+    precondition: draft.precondition ?? "",
+    steps,
+    data: draft.data ?? "",
+    ...(draft.stepExpectedResults?.length
+      ? { stepExpectedResults: draft.stepExpectedResults }
+      : {}),
+    expectedResult: draft.expectedResult ?? "",
+  };
+}
+
+// A batch is per-step when every case has its own per-step results.
+function draftsFormat(drafts) {
+  return drafts.length > 0 &&
+    drafts.every((draft) => draft.stepExpectedResults?.length)
+    ? "PER_STEP"
+    : "OVERALL";
+}
+
+const refinementSelect = {
+  id: true,
+  status: true,
+  error: true,
+  instruction: true,
+  replySummary: true,
+  createdAt: true,
+  completedAt: true,
+};
+
 export function createGenerationService({
   prisma,
   n8nClient,
@@ -142,30 +187,10 @@ export function createGenerationService({
         callbackTokenExpiresAt: expiresAt,
         documentId: source.documentId ?? null,
         sectionTitle: source.sectionTitle ?? null,
+        refinesRunId: source.refinesRunId ?? null,
+        instruction: source.instruction ?? null,
       },
     });
-
-    async function getGenerationRun(projectId, runId) {
-      const run = await prisma.generationRun.findFirst({
-        where: {
-          id: runId,
-          projectId,
-        },
-        select: {
-          id: true,
-          status: true,
-          error: true,
-          createdAt: true,
-          completedAt: true,
-        },
-      });
-
-      if (!run) {
-        throw new ApiError(404, "NOT_FOUND", "Generation run not found");
-      }
-
-      return run;
-    }
 
     return {
       run,
@@ -215,21 +240,27 @@ export function createGenerationService({
       return { id, url };
     });
 
+    return submitToN8n(run, {
+      mode: "GENERATE",
+      runId: run.id,
+      projectId,
+      message,
+      generationFormat,
+      evidenceIds,
+      evidence: evidencePayload,
+      callbackUrl,
+      callbackToken,
+    });
+  }
+
+  // Sends the request to n8n; if n8n can't take it, the run is closed as failed.
+  async function submitToN8n(run, payload) {
     try {
-      await n8nClient.triggerGeneration({
-        runId: run.id,
-        projectId,
-        message,
-        generationFormat,
-        evidenceIds,
-        evidence: evidencePayload,
-        callbackUrl,
-        callbackToken,
-      });
+      await n8nClient.triggerGeneration(payload);
 
       return {
         id: run.id,
-        projectId,
+        projectId: run.projectId,
         status: "PENDING",
         createdAt: run.createdAt,
       };
@@ -251,6 +282,88 @@ export function createGenerationService({
         error.message || "Unable to submit generation request to n8n",
       );
     }
+  }
+
+  // The review batch a chat message refers to: it must still be waiting for review.
+  async function findReviewBatch(projectId, runId) {
+    const batch = await prisma.generationRun.findFirst({
+      where: { id: runId, projectId, refinesRunId: null },
+      select: { id: true, draftTestCases: true, reviewedAt: true },
+    });
+
+    if (!batch) {
+      throw new ApiError(404, "NOT_FOUND", "Generation run not found");
+    }
+
+    return batch;
+  }
+
+  // AI chat: asks n8n to change a batch of drafts the way the user describes.
+  // The finished change replaces the batch's drafts (see completeGeneration).
+  async function startRefinement(projectId, runId, instruction) {
+    const batch = await findReviewBatch(projectId, runId);
+    const drafts = parseDrafts(batch.draftTestCases);
+    if (!drafts || batch.reviewedAt) throw alreadyReviewed();
+
+    await expireStaleRuns({ projectId, refinesRunId: runId });
+
+    const earlier = await prisma.generationRun.findMany({
+      where: { projectId, refinesRunId: runId },
+      orderBy: { createdAt: "asc" },
+      select: { status: true, instruction: true, replySummary: true },
+    });
+
+    if (earlier.some((run) => run.status === "PENDING")) {
+      throw new ApiError(
+        409,
+        "REFINEMENT_IN_PROGRESS",
+        "Wait for the current change to finish before asking for another",
+      );
+    }
+
+    const { run, callbackToken } = await createRun(projectId, instruction, [], {
+      refinesRunId: runId,
+      instruction,
+    });
+
+    const history = earlier
+      .filter((item) => item.status === "SUCCEEDED")
+      .slice(-MAX_REFINE_HISTORY)
+      .map((item) => ({
+        instruction: item.instruction,
+        reply: item.replySummary ?? "",
+      }));
+
+    return submitToN8n(run, {
+      mode: "REFINE",
+      runId: run.id,
+      projectId,
+      message: instruction,
+      instruction,
+      generationFormat: draftsFormat(drafts),
+      currentTestCases: drafts.map(toN8nDraft),
+      history,
+      evidenceIds: [],
+      evidence: [],
+      callbackUrl:
+        `${publicBackendUrl}/api/projects/${projectId}` +
+        `/generations/${run.id}/callback`,
+      callbackToken,
+    });
+  }
+
+  // The chat history of a review batch, oldest first.
+  async function listRefinements(projectId, runId) {
+    await findReviewBatch(projectId, runId);
+    await expireStaleRuns({ projectId, refinesRunId: runId });
+
+    const items = await prisma.generationRun.findMany({
+      where: { projectId, refinesRunId: runId },
+      orderBy: { createdAt: "asc" },
+      select: refinementSelect,
+    });
+
+    return { items, total: items.length };
   }
 
   // Checks the one-time callback token and marks it used, inside a transaction.
@@ -288,6 +401,8 @@ export function createGenerationService({
     });
 
     if (consumed.count !== 1) throw invalidCallbackToken();
+
+    return run;
   }
 
   // n8n reports that it could not produce test cases for this run.
@@ -295,13 +410,19 @@ export function createGenerationService({
     const now = new Date();
 
     return prisma.$transaction(async (tx) => {
-      await consumeCallbackToken(tx, projectId, runId, token, now);
+      const { refinesRunId } = await consumeCallbackToken(tx, projectId, runId, token, now);
+
+      // n8n prefixes the failing node's name ("Build Refine Request: ...");
+      // a chat reply only needs the reason itself.
+      const error = refinesRunId
+        ? `Couldn't make this change: ${reason.replace(/^[^:\n]{1,60}: /, "")}`
+        : `Generation failed in n8n: ${reason}`;
 
       await tx.generationRun.update({
         where: { id: runId },
         data: {
           status: "FAILED",
-          error: `Generation failed in n8n: ${reason}`.slice(0, MAX_ERROR_LENGTH),
+          error: error.slice(0, MAX_ERROR_LENGTH),
           completedAt: now,
           callbackTokenHash: null,
           callbackTokenExpiresAt: null,
@@ -329,11 +450,15 @@ export function createGenerationService({
     });
   }
 
-  async function completeGeneration(projectId, runId, token, testCases) {
+  async function completeGeneration(projectId, runId, token, testCases, summary) {
     const now = new Date();
 
     return prisma.$transaction(async (tx) => {
-      await consumeCallbackToken(tx, projectId, runId, token, now);
+      const { refinesRunId } = await consumeCallbackToken(tx, projectId, runId, token, now);
+
+      if (refinesRunId) {
+        return applyRefinement(tx, { projectId, runId, refinesRunId, testCases, summary, now });
+      }
 
       // Keep the cases as drafts; they become test cases only when accepted.
       await tx.generationRun.update({
@@ -355,6 +480,45 @@ export function createGenerationService({
     });
   }
 
+  // A finished chat change replaces the batch's drafts, unless the batch was
+  // accepted or discarded in the meantime.
+  async function applyRefinement(tx, { projectId, runId, refinesRunId, testCases, summary, now }) {
+    const replaced = await tx.generationRun.updateMany({
+      where: {
+        id: refinesRunId,
+        projectId,
+        draftTestCases: { not: null },
+        reviewedAt: null,
+      },
+      data: { draftTestCases: JSON.stringify(testCases) },
+    });
+
+    const done = {
+      completedAt: now,
+      callbackTokenHash: null,
+      callbackTokenExpiresAt: null,
+    };
+
+    if (replaced.count !== 1) {
+      await tx.generationRun.update({
+        where: { id: runId },
+        data: { ...done, status: "FAILED", error: REFINE_REVIEWED_ERROR },
+      });
+      return { runId, status: "FAILED", draftCount: 0 };
+    }
+
+    await tx.generationRun.update({
+      where: { id: runId },
+      data: {
+        ...done,
+        status: "SUCCEEDED",
+        replySummary: summary ? summary.slice(0, MAX_ERROR_LENGTH * 2) : null,
+      },
+    });
+
+    return { runId, status: "SUCCEEDED", draftCount: testCases.length };
+  }
+
   async function getGenerationRun(projectId, runId) {
     await expireStaleRuns({ id: runId, projectId });
 
@@ -371,6 +535,9 @@ export function createGenerationService({
         completedAt: true,
         reviewedAt: true,
         draftTestCases: true,
+        refinesRunId: true,
+        instruction: true,
+        replySummary: true,
         ...sourceSelect,
       },
     });
@@ -517,6 +684,8 @@ export function createGenerationService({
   return {
     createRun,
     startGeneration,
+    startRefinement,
+    listRefinements,
     completeGeneration,
     failGeneration,
     expireStaleRuns,

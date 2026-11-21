@@ -66,5 +66,20 @@ export const generationFailureSchema = z
 export const generationCallbackSchema = z
   .object({
     testCases: z.array(generatedTestCaseSchema).min(1).max(100),
+    // A chat change's short reply ("Added 3 negative cases..."). Empty or
+    // missing for normal generation runs.
+    summary: z
+      .string()
+      .trim()
+      .max(1000)
+      .nullish()
+      .transform((value) => value || undefined),
+  })
+  .strict();
+
+// AI chat: what the user wants changed in a batch of generated test cases.
+export const refineDraftsSchema = z
+  .object({
+    instruction: z.string().trim().min(1).max(1000),
   })
   .strict();

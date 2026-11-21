@@ -34,7 +34,7 @@
         144
       ],
       "parameters": {
-        "jsCode": "\nconst input = $input.first().json;\nconst body = input.body ?? input;\n\nconst requiredFields = [\n  \"runId\",\n  \"projectId\",\n  \"message\",\n  \"callbackUrl\",\n  \"callbackToken\",\n];\n\nfor (const field of requiredFields) {\n  if (\n    typeof body[field] !== \"string\" ||\n    body[field].trim() === \"\"\n  ) {\n    throw new Error(`Missing or invalid field: ${field}`);\n  }\n}\n\nif (\n  !Array.isArray(body.evidenceIds) ||\n  !Array.isArray(body.evidence)\n) {\n  throw new Error(\"Invalid evidence payload\");\n}\n\nfor (const item of body.evidence) {\n  if (\n    typeof item.id !== \"string\" ||\n    typeof item.url !== \"string\"\n  ) {\n    throw new Error(\"Invalid evidence item\");\n  }\n\n  const isValidUrl = /^https?:\\/\\/[^/\\s?#]+(?:[/?#]|$)/i.test(\n    item.url.trim()\n  );\n\n  if (!isValidUrl) {\n    throw new Error(\"Invalid evidence URL\");\n  }\n}\n\nconst callbackUrlIsValid =\n  /^https?:\\/\\/[^/\\s?#]+(?:[/?#]|$)/i.test(body.callbackUrl.trim());\n\nif (!callbackUrlIsValid) {\n  throw new Error(\"Invalid callback URL\");\n}\n\nreturn [\n  {\njson: {\n  runId: body.runId,\n  projectId: body.projectId,\n  message: body.message,\n  generationFormat:\n    body.generationFormat === \"PER_STEP\" ? \"PER_STEP\" : \"OVERALL\",\n  evidenceIds: body.evidenceIds,\n  evidence: body.evidence,\n  callbackUrl: body.callbackUrl,\n  callbackToken: body.callbackToken,\n},\n  },\n];\n"
+        "jsCode": "\nconst input = $input.first().json;\nconst body = input.body ?? input;\n\nconst requiredFields = [\n  \"runId\",\n  \"projectId\",\n  \"message\",\n  \"callbackUrl\",\n  \"callbackToken\",\n];\n\nfor (const field of requiredFields) {\n  if (\n    typeof body[field] !== \"string\" ||\n    body[field].trim() === \"\"\n  ) {\n    throw new Error(`Missing or invalid field: ${field}`);\n  }\n}\n\nif (\n  !Array.isArray(body.evidenceIds) ||\n  !Array.isArray(body.evidence)\n) {\n  throw new Error(\"Invalid evidence payload\");\n}\n\nfor (const item of body.evidence) {\n  if (\n    typeof item.id !== \"string\" ||\n    typeof item.url !== \"string\"\n  ) {\n    throw new Error(\"Invalid evidence item\");\n  }\n\n  const isValidUrl = /^https?:\\/\\/[^/\\s?#]+(?:[/?#]|$)/i.test(\n    item.url.trim()\n  );\n\n  if (!isValidUrl) {\n    throw new Error(\"Invalid evidence URL\");\n  }\n}\n\nconst mode = body.mode === \"REFINE\" ? \"REFINE\" : \"GENERATE\";\n\nif (mode === \"REFINE\") {\n  if (typeof body.instruction !== \"string\" || !body.instruction.trim()) {\n    throw new Error(\"Missing or invalid field: instruction\");\n  }\n\n  if (\n    !Array.isArray(body.currentTestCases) ||\n    body.currentTestCases.length === 0 ||\n    body.currentTestCases.length > 100\n  ) {\n    throw new Error(\"Missing or invalid field: currentTestCases\");\n  }\n}\n\nconst callbackUrlIsValid =\n  /^https?:\\/\\/[^/\\s?#]+(?:[/?#]|$)/i.test(body.callbackUrl.trim());\n\nif (!callbackUrlIsValid) {\n  throw new Error(\"Invalid callback URL\");\n}\n\nreturn [\n  {\njson: {\n  runId: body.runId,\n  projectId: body.projectId,\n  message: body.message,\n  generationFormat:\n    body.generationFormat === \"PER_STEP\" ? \"PER_STEP\" : \"OVERALL\",\n  evidenceIds: body.evidenceIds,\n  evidence: body.evidence,\n  callbackUrl: body.callbackUrl,\n  callbackToken: body.callbackToken,\n  mode,\n  instruction: mode === \"REFINE\" ? body.instruction.trim() : null,\n  currentTestCases: mode === \"REFINE\" ? body.currentTestCases : [],\n  history: mode === \"REFINE\" && Array.isArray(body.history) ? body.history : [],\n},\n  },\n];\n"
       }
     },
     {
@@ -152,11 +152,11 @@
       "typeVersion": 2,
       "onError": "continueErrorOutput",
       "position": [
-        2688,
+        3136,
         144
       ],
       "parameters": {
-        "jsCode": "const item = $input.first();\n\nif (!item) {\n  throw new Error(\"No Ollama response received\");\n}\n\nconst context = $(\"Build Generation Context\").first().json;\nconst rawText = item.json.message?.content;\n\nif (typeof rawText !== \"string\" || !rawText.trim()) {\n  throw new Error(\"Ollama response text is missing\");\n}\n\nconst cleanedText = rawText\n  .replace(/^```(?:json)?\\s*/i, \"\")\n  .replace(/\\s*```$/, \"\")\n  .trim();\n\n// When the model stops mid-answer (output limit, or stuck repeating itself),\n// the JSON is cut off. Recover every test case object that was completed\n// before the break; the incomplete last one is dropped.\nfunction salvageTestCases(text) {\n  const key = text.indexOf('\"testCases\"');\n  const start = key === -1 ? -1 : text.indexOf(\"[\", key);\n  if (start === -1) return [];\n\n  const cases = [];\n  let depth = 0;\n  let inString = false;\n  let escaped = false;\n  let objectStart = -1;\n\n  for (let i = start + 1; i < text.length; i += 1) {\n    const ch = text[i];\n\n    if (inString) {\n      if (escaped) escaped = false;\n      else if (ch === \"\\\\\") escaped = true;\n      else if (ch === '\"') inString = false;\n      continue;\n    }\n\n    if (ch === '\"') {\n      inString = true;\n    } else if (ch === \"{\") {\n      if (depth === 0) objectStart = i;\n      depth += 1;\n    } else if (ch === \"}\") {\n      depth -= 1;\n      if (depth === 0 && objectStart !== -1) {\n        try {\n          cases.push(JSON.parse(text.slice(objectStart, i + 1)));\n        } catch {\n          // Not valid on its own; leave it out.\n        }\n        objectStart = -1;\n      }\n    } else if (ch === \"]\" && depth === 0) {\n      break;\n    }\n  }\n\n  return cases;\n}\n\nlet parsed;\nlet truncated = false;\n\ntry {\n  parsed = JSON.parse(cleanedText);\n} catch (error) {\n  const salvaged = salvageTestCases(cleanedText);\n\n  if (salvaged.length === 0) {\n    throw new Error(\n      `Ollama returned invalid JSON: ${error.message}. The response may have been truncated.`\n    );\n  }\n\n  parsed = { testCases: salvaged };\n  truncated = true;\n}\n\nif (\n  !parsed ||\n  typeof parsed !== \"object\" ||\n  !Array.isArray(parsed.testCases) ||\n  parsed.testCases.length === 0\n) {\n  throw new Error(\"Ollama response must contain at least one test case\");\n}\n\nconst generationFormat =\n  context.generationFormat === \"PER_STEP\" ? \"PER_STEP\" : \"OVERALL\";\n\n// Limits enforced by the AI QA Studio callback schema. A case over a limit\n// would make the app reject the whole callback, so it is skipped here instead.\nconst MAX_CASES = 100;\nconst MAX_TITLE = 300;\nconst MAX_TEXT = 5000;\nconst MAX_STEPS = 50;\n\nfunction toText(value) {\n  if (value === undefined || value === null) return \"\";\n  if (typeof value === \"string\") return value;\n  if (typeof value === \"number\" || typeof value === \"boolean\") return String(value);\n  return JSON.stringify(value);\n}\n\n// Returns a normalized test case, or throws with the reason it can't be used.\nfunction normalizeCase(original) {\n  if (!original || typeof original !== \"object\" || Array.isArray(original)) {\n    throw new Error(\"must be an object\");\n  }\n\n  const title = typeof original.title === \"string\" ? original.title.trim() : \"\";\n  if (!title) throw new Error(\"has an invalid title\");\n  if (title.length > MAX_TITLE) {\n    throw new Error(`has a title longer than ${MAX_TITLE} characters`);\n  }\n\n  const text = {};\n  for (const field of [\"description\", \"precondition\", \"data\"]) {\n    text[field] = toText(original[field]);\n    if (text[field].length > MAX_TEXT) {\n      throw new Error(`has a ${field} longer than ${MAX_TEXT} characters`);\n    }\n  }\n\n  const steps = original.steps;\n  if (\n    !Array.isArray(steps) ||\n    steps.length === 0 ||\n    steps.length > MAX_STEPS ||\n    steps.some((step) => typeof step !== \"string\" || !step.trim())\n  ) {\n    throw new Error(\"has invalid steps\");\n  }\n\n  const base = {\n    title,\n    description: text.description,\n    precondition: text.precondition,\n    steps,\n    data: text.data,\n  };\n\n  if (generationFormat === \"PER_STEP\") {\n    // Small models sometimes add an overall expectedResult as well. It is\n    // not sent to the app for PER_STEP cases, so it is ignored.\n    const results = original.stepExpectedResults;\n    if (\n      !Array.isArray(results) ||\n      results.length !== steps.length ||\n      results.some(\n        (result) =>\n          typeof result !== \"string\" ||\n          !result.trim() ||\n          result.trim().length > MAX_TEXT\n      )\n    ) {\n      throw new Error(\"must have exactly one non-empty expected result per step\");\n    }\n\n    return { ...base, stepExpectedResults: results.map((result) => result.trim()) };\n  }\n\n  const expectedResult =\n    typeof original.expectedResult === \"string\" ? original.expectedResult.trim() : \"\";\n  if (!expectedResult || expectedResult.length > MAX_TEXT) {\n    throw new Error(\"has an invalid expected result\");\n  }\n\n  return { ...base, expectedResult };\n}\n\n// Small models sometimes repeat the same test case over and over. Titles are\n// compared ignoring case, spacing and punctuation; the first one is kept.\nfunction titleKey(title) {\n  return title.toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, \" \").trim();\n}\n\nconst normalizedTestCases = [];\nconst skipped = [];\nconst firstCaseByTitle = new Map();\n\nif (truncated) {\n  skipped.push(\"The response was cut off; the incomplete last test case was dropped\");\n}\n\nfor (const [index, original] of parsed.testCases.entries()) {\n  const caseNumber = index + 1;\n\n  if (normalizedTestCases.length >= MAX_CASES) {\n    skipped.push(`Test case ${caseNumber}: over the limit of ${MAX_CASES} test cases`);\n    continue;\n  }\n\n  try {\n    const testCase = normalizeCase(original);\n    const key = titleKey(testCase.title);\n\n    if (firstCaseByTitle.has(key)) {\n      skipped.push(`Test case ${caseNumber} duplicates test case ${firstCaseByTitle.get(key)}`);\n      continue;\n    }\n\n    firstCaseByTitle.set(key, caseNumber);\n    normalizedTestCases.push(testCase);\n  } catch (error) {\n    // Skip one malformed case instead of failing the whole batch; the user\n    // reviews the remaining cases before anything is saved.\n    skipped.push(`Test case ${caseNumber} ${error.message}`);\n  }\n}\n\nif (normalizedTestCases.length === 0) {\n  throw new Error(`Ollama returned no usable test cases. ${skipped.join(\"; \")}`);\n}\n\nreturn [\n  {\n    json: {\n      ...context,\n      testCases: normalizedTestCases,\n      testCaseCount: normalizedTestCases.length,\n      skippedCount: skipped.length,\n      skipped,\n    },\n  },\n];\n"
+        "jsCode": "const item = $input.first();\n\nif (!item) {\n  throw new Error(\"No Ollama response received\");\n}\n\nconst context = $(\"Build Generation Context\").first().json;\nconst rawText = item.json.message?.content;\n\nif (typeof rawText !== \"string\" || !rawText.trim()) {\n  throw new Error(\"Ollama response text is missing\");\n}\n\nconst cleanedText = rawText\n  .replace(/^```(?:json)?\\s*/i, \"\")\n  .replace(/\\s*```$/, \"\")\n  .trim();\n\n// When the model stops mid-answer (output limit, or stuck repeating itself),\n// the JSON is cut off. Recover every test case object that was completed\n// before the break; the incomplete last one is dropped.\nfunction salvageTestCases(text) {\n  const key = text.indexOf('\"testCases\"');\n  const start = key === -1 ? -1 : text.indexOf(\"[\", key);\n  if (start === -1) return [];\n\n  const cases = [];\n  let depth = 0;\n  let inString = false;\n  let escaped = false;\n  let objectStart = -1;\n\n  for (let i = start + 1; i < text.length; i += 1) {\n    const ch = text[i];\n\n    if (inString) {\n      if (escaped) escaped = false;\n      else if (ch === \"\\\\\") escaped = true;\n      else if (ch === '\"') inString = false;\n      continue;\n    }\n\n    if (ch === '\"') {\n      inString = true;\n    } else if (ch === \"{\") {\n      if (depth === 0) objectStart = i;\n      depth += 1;\n    } else if (ch === \"}\") {\n      depth -= 1;\n      if (depth === 0 && objectStart !== -1) {\n        try {\n          cases.push(JSON.parse(text.slice(objectStart, i + 1)));\n        } catch {\n          // Not valid on its own; leave it out.\n        }\n        objectStart = -1;\n      }\n    } else if (ch === \"]\" && depth === 0) {\n      break;\n    }\n  }\n\n  return cases;\n}\n\nlet parsed;\nlet truncated = false;\n\ntry {\n  parsed = JSON.parse(cleanedText);\n} catch (error) {\n  const salvaged = salvageTestCases(cleanedText);\n\n  if (salvaged.length === 0) {\n    throw new Error(\n      `Ollama returned invalid JSON: ${error.message}. The response may have been truncated.`\n    );\n  }\n\n  parsed = { testCases: salvaged };\n  truncated = true;\n}\n\nif (\n  !parsed ||\n  typeof parsed !== \"object\" ||\n  !Array.isArray(parsed.testCases) ||\n  parsed.testCases.length === 0\n) {\n  throw new Error(\"Ollama response must contain at least one test case\");\n}\n\nconst generationFormat =\n  context.generationFormat === \"PER_STEP\" ? \"PER_STEP\" : \"OVERALL\";\n\n// Limits enforced by the AI QA Studio callback schema. A case over a limit\n// would make the app reject the whole callback, so it is skipped here instead.\nconst MAX_CASES = 100;\nconst MAX_TITLE = 300;\nconst MAX_TEXT = 5000;\nconst MAX_STEPS = 50;\n\nfunction toText(value) {\n  if (value === undefined || value === null) return \"\";\n  if (typeof value === \"string\") return value;\n  if (typeof value === \"number\" || typeof value === \"boolean\") return String(value);\n  return JSON.stringify(value);\n}\n\n// Returns a normalized test case, or throws with the reason it can't be used.\nfunction normalizeCase(original) {\n  if (!original || typeof original !== \"object\" || Array.isArray(original)) {\n    throw new Error(\"must be an object\");\n  }\n\n  const title = typeof original.title === \"string\" ? original.title.trim() : \"\";\n  if (!title) throw new Error(\"has an invalid title\");\n  if (title.length > MAX_TITLE) {\n    throw new Error(`has a title longer than ${MAX_TITLE} characters`);\n  }\n\n  const text = {};\n  for (const field of [\"description\", \"precondition\", \"data\"]) {\n    text[field] = toText(original[field]);\n    if (text[field].length > MAX_TEXT) {\n      throw new Error(`has a ${field} longer than ${MAX_TEXT} characters`);\n    }\n  }\n\n  const steps = original.steps;\n  if (\n    !Array.isArray(steps) ||\n    steps.length === 0 ||\n    steps.length > MAX_STEPS ||\n    steps.some((step) => typeof step !== \"string\" || !step.trim())\n  ) {\n    throw new Error(\"has invalid steps\");\n  }\n\n  const base = {\n    title,\n    description: text.description,\n    precondition: text.precondition,\n    steps,\n    data: text.data,\n  };\n\n  if (generationFormat === \"PER_STEP\") {\n    // Small models sometimes add an overall expectedResult as well. It is\n    // not sent to the app for PER_STEP cases, so it is ignored.\n    const results = original.stepExpectedResults;\n    if (\n      !Array.isArray(results) ||\n      results.length !== steps.length ||\n      results.some(\n        (result) =>\n          typeof result !== \"string\" ||\n          !result.trim() ||\n          result.trim().length > MAX_TEXT\n      )\n    ) {\n      throw new Error(\"must have exactly one non-empty expected result per step\");\n    }\n\n    return { ...base, stepExpectedResults: results.map((result) => result.trim()) };\n  }\n\n  const expectedResult =\n    typeof original.expectedResult === \"string\" ? original.expectedResult.trim() : \"\";\n  if (!expectedResult || expectedResult.length > MAX_TEXT) {\n    throw new Error(\"has an invalid expected result\");\n  }\n\n  return { ...base, expectedResult };\n}\n\n// Small models sometimes repeat the same test case over and over. Titles are\n// compared ignoring case, spacing and punctuation; the first one is kept.\nfunction titleKey(title) {\n  return title.toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, \" \").trim();\n}\n\nconst normalizedTestCases = [];\nconst skipped = [];\nconst firstCaseByTitle = new Map();\n\nif (truncated) {\n  skipped.push(\"The response was cut off; the incomplete last test case was dropped\");\n}\n\nfor (const [index, original] of parsed.testCases.entries()) {\n  const caseNumber = index + 1;\n\n  if (normalizedTestCases.length >= MAX_CASES) {\n    skipped.push(`Test case ${caseNumber}: over the limit of ${MAX_CASES} test cases`);\n    continue;\n  }\n\n  try {\n    const testCase = normalizeCase(original);\n    const key = titleKey(testCase.title);\n\n    if (firstCaseByTitle.has(key)) {\n      skipped.push(`Test case ${caseNumber} duplicates test case ${firstCaseByTitle.get(key)}`);\n      continue;\n    }\n\n    firstCaseByTitle.set(key, caseNumber);\n    normalizedTestCases.push(testCase);\n  } catch (error) {\n    // Skip one malformed case instead of failing the whole batch; the user\n    // reviews the remaining cases before anything is saved.\n    skipped.push(`Test case ${caseNumber} ${error.message}`);\n  }\n}\n\nif (normalizedTestCases.length === 0) {\n  throw new Error(`Ollama returned no usable test cases. ${skipped.join(\"; \")}`);\n}\n\nreturn [\n  {\n    json: {\n      ...context,\n      testCases: normalizedTestCases,\n      testCaseCount: normalizedTestCases.length,\n      skippedCount: skipped.length,\n      skipped,\n      refineSummary: item.json.refineSummary ?? null,\n    },\n  },\n];\n"
       }
     },
     {
@@ -166,7 +166,7 @@
       "typeVersion": 4.5,
       "onError": "continueErrorOutput",
       "position": [
-        2912,
+        3360,
         144
       ],
       "parameters": {
@@ -183,7 +183,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{\n  {\n    testCases: $json.testCases\n  }\n}}",
+        "jsonBody": "={{\n  {\n    testCases: $json.testCases,\n    summary: $json.refineSummary\n      ? $json.refineSummary + ($json.skippedCount ? ' ' + $json.skippedCount + ' unusable or repeated test case(s) from the model were left out.' : '')\n      : null\n  }\n}}",
         "options": {}
       }
     },
@@ -193,8 +193,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        2240,
-        144
+        2464,
+        240
       ],
       "parameters": {
         "conditions": {
@@ -228,8 +228,8 @@
       "typeVersion": 4.5,
       "onError": "continueErrorOutput",
       "position": [
-        2464,
-        224
+        2688,
+        320
       ],
       "parameters": {
         "method": "POST",
@@ -262,8 +262,8 @@
       "typeVersion": 4.5,
       "onError": "continueErrorOutput",
       "position": [
-        2464,
-        64
+        2688,
+        160
       ],
       "parameters": {
         "method": "POST",
@@ -284,8 +284,8 @@
       "executeOnce": true,
       "onError": "continueRegularOutput",
       "position": [
-        2912,
-        384
+        3360,
+        400
       ],
       "parameters": {
         "method": "POST",
@@ -319,8 +319,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.5,
       "position": [
-        1792,
-        144
+        2016,
+        240
       ],
       "id": "894a8e87-f78b-4e09-a812-035471699617",
       "name": "List Scenarios (Ollama)",
@@ -333,11 +333,129 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2016,
-        144
+        2240,
+        240
       ],
       "id": "dff3d135-a686-4c44-b3b2-bf3b9316a7ff",
       "name": "Plan Scenarios",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "e2360772-c0aa-4cd7-b002-914f02b87fdc",
+              "leftValue": "={{ $json.mode }}",
+              "rightValue": "REFINE",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1792,
+        144
+      ],
+      "id": "8ec460dd-2e23-4ca0-8520-97d69fb457b3",
+      "name": "Is Refine?"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst context = $input.first().json;\nconst current = context.currentTestCases ?? [];\nconst count = current.length;\n\nconst titles = current.map((item, i) => \"#\" + (i + 1) + \" \" + item.title).join(\"\\n\");\nconst earlier = (context.history ?? [])\n  .map((item) => '- \"' + item.instruction + '\"' + (item.reply ? \" -> \" + item.reply : \"\"))\n  .join(\"\\n\");\n\nconst prompt = [\n  \"You are a senior software QA analyst. A tester wants to change a list of test cases.\",\n  \"\",\n  \"TEST CASES:\",\n  titles,\n  \"\",\n  earlier ? \"EARLIER REQUESTS (already done):\\n\" + earlier + \"\\n\" : \"\",\n  'TESTER\\'S REQUEST: \"' + context.instruction + '\"',\n  \"\",\n  \"Work out which changes the request asks for. Each change has a type:\",\n  \"- ADD: write new test cases. Set count to how many (use the number in the request, otherwise your best judgement, 1 to 10).\",\n  \"- EDIT: rewrite existing test cases. List their numbers. If the request is about all test cases, list every number.\",\n  \"- REMOVE: delete existing test cases. List their numbers.\",\n  'Describe each change in \"what\" in a few words.',\n  \"Only include changes the request actually asks for. Most requests need exactly one change.\",\n  \"Return only JSON.\",\n].join(\"\\n\");\n\nconst caseNumber = { type: \"integer\", minimum: 1, maximum: Math.max(1, count) };\nconst schema = {\n  type: \"object\",\n  properties: {\n    changes: {\n      type: \"array\",\n      minItems: 1,\n      maxItems: 3,\n      items: {\n        type: \"object\",\n        properties: {\n          type: { type: \"string\", enum: [\"ADD\", \"EDIT\", \"REMOVE\"] },\n          numbers: { type: \"array\", items: caseNumber, maxItems: Math.max(1, count) },\n          count: { type: \"integer\", minimum: 0, maximum: 10 },\n          what: { type: \"string\" },\n        },\n        required: [\"type\", \"numbers\", \"count\", \"what\"],\n      },\n    },\n  },\n  required: [\"changes\"],\n};\n\nreturn [\n  {\n    json: {\n      ...context,\n      refineRequest: {\n        model: \"qwen3-vl:2b-instruct\",\n        stream: false,\n        format: schema,\n        messages: [{ role: \"user\", content: prompt }],\n        options: { temperature: 0, num_predict: 400, num_ctx: 8192 },\n      },\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2016,
+        -96
+      ],
+      "id": "b9a97e5b-08af-4710-83b9-874b2ba0d556",
+      "name": "Build Refine Plan",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:11434/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.refineRequest) }}",
+        "options": {
+          "timeout": 1500000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2240,
+        -96
+      ],
+      "id": "4b7ccd40-9148-4638-8ae1-7334c559fe6a",
+      "name": "Plan Refinement (Ollama)",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst context = $(\"Build Refine Plan\").first().json;\nconst current = context.currentTestCases ?? [];\nconst count = current.length;\nconst perStep = context.generationFormat === \"PER_STEP\";\nconst rawText = $input.first().json.message?.content;\n\nlet planned = [];\ntry {\n  planned = JSON.parse(String(rawText).replace(/^```(?:json)?\\s*/i, \"\").replace(/\\s*```$/, \"\").trim()).changes ?? [];\n} catch (error) {\n  throw new Error(\"The model's plan could not be read: \" + error.message);\n}\n\nconst valid = (n) => Number.isInteger(n) && n >= 1 && n <= count;\nconst unique = (list) => [...new Set(list)].sort((a, b) => a - b);\n\nlet edits = [];\nlet removes = [];\nlet addCount = 0;\nconst notes = [];\nfor (const change of Array.isArray(planned) ? planned : []) {\n  const numbers = unique((Array.isArray(change?.numbers) ? change.numbers : []).filter(valid));\n  if (change?.type === \"EDIT\" && numbers.length) {\n    edits.push(...numbers);\n    notes.push(\"Rewrite test case(s) \" + numbers.map((n) => \"#\" + n).join(\", \") + \": \" + (change.what || context.instruction));\n  } else if (change?.type === \"REMOVE\" && numbers.length) {\n    removes.push(...numbers);\n  } else if (change?.type === \"ADD\") {\n    const asked = /\\b(\\d{1,2})\\b/.exec(context.instruction);\n    const n = Number.isInteger(change.count) && change.count > 0 ? change.count : asked ? Number(asked[1]) : 2;\n    addCount += Math.min(10, Math.max(1, n));\n    notes.push(\"Write new test case(s): \" + (change.what || context.instruction));\n  }\n}\nedits = unique(edits);\nremoves = unique(removes).filter((n) => !edits.includes(n));\naddCount = Math.min(10, addCount, 100 - (count - removes.length));\n\nif (!edits.length && !removes.length && addCount <= 0) {\n  throw new Error(\"Could not work out what to change. Try describing the change more specifically, for example: add 2 test cases for the phone number field.\");\n}\nif (removes.length === count && !addCount) {\n  throw new Error(\"That would remove every test case, so nothing was changed. Use Discard all instead.\");\n}\n\nconst steps = { type: \"array\", items: { type: \"string\" }, minItems: 1, maxItems: 15 };\nconst properties = {\n  title: { type: \"string\" },\n  description: { type: \"string\" },\n  precondition: { type: \"string\" },\n  steps,\n};\nif (perStep) properties.stepExpectedResults = steps;\nproperties.data = { type: \"string\" };\nproperties.expectedResult = { type: \"string\" };\nconst testCase = { type: \"object\", properties, required: Object.keys(properties) };\n\nconst schemaProps = {};\nconst required = [];\nif (edits.length) {\n  schemaProps.update = {\n    type: \"array\",\n    minItems: edits.length,\n    maxItems: edits.length,\n    items: {\n      type: \"object\",\n      properties: { number: { type: \"integer\", enum: edits }, testCase },\n      required: [\"number\", \"testCase\"],\n    },\n  };\n  required.push(\"update\");\n}\nif (addCount > 0) {\n  schemaProps.add = { type: \"array\", minItems: addCount, maxItems: addCount, items: testCase };\n  required.push(\"add\");\n}\nschemaProps.summary = { type: \"string\" };\nrequired.push(\"summary\");\n\nconst formatRule = perStep\n  ? \"Each test case has stepExpectedResults with exactly one entry per step, plus one overall expectedResult.\"\n  : \"Each test case has one overall expectedResult and no stepExpectedResults.\";\n\nconst lines = [\n  \"You are a senior software QA analyst refining test cases for a tester.\",\n  'TESTER\\'S REQUEST: \"' + context.instruction + '\"',\n  \"\",\n  \"ALL CURRENT TEST CASES (titles):\",\n  current.map((item, i) => \"#\" + (i + 1) + \" \" + item.title).join(\"\\n\"),\n  \"\",\n];\nif (edits.length) {\n  lines.push(\"TEST CASES TO REWRITE (full details):\");\n  for (const n of edits) lines.push(\"#\" + n + \" \" + JSON.stringify(current[n - 1]));\n  lines.push(\"\");\n}\nif (removes.length) {\n  lines.push(\"These test cases are being removed: \" + removes.map((n) => \"#\" + n).join(\", \") + \".\");\n  lines.push(\"\");\n}\nlines.push(\"YOUR TASKS:\");\nfor (const note of notes) lines.push(\"- \" + note);\nif (edits.length) lines.push('- In \"update\", give each rewritten test case once, with its number and its complete new version.');\nif (addCount > 0) lines.push('- In \"add\", write exactly ' + addCount + \" new test case(s). Their titles must differ from all current titles.\");\nlines.push(\"- Do not invent features that the test cases or the request don't mention.\");\nlines.push(\"- \" + formatRule);\nlines.push('- \"summary\": one or two sentences telling the tester what you changed.');\nlines.push(\"Return only JSON.\");\nconst prompt = lines.join(\"\\n\");\n\nconst numPredict = Math.min(16000, 300 + (edits.length + addCount) * (perStep ? 600 : 450));\nconst promptTokens = Math.ceil(prompt.length / 3.5) + 200;\nconst numCtx = Math.min(32768, Math.max(8192, Math.ceil((promptTokens + numPredict) / 1024) * 1024));\n\nreturn [\n  {\n    json: {\n      ...context,\n      refinePlan: { edits, removes, addCount },\n      refineRequest: {\n        model: \"qwen3-vl:2b-instruct\",\n        stream: false,\n        format: { type: \"object\", properties: schemaProps, required },\n        messages: [{ role: \"user\", content: prompt }],\n        options: { temperature: 0.2, num_predict: numPredict, num_ctx: numCtx },\n      },\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2464,
+        -96
+      ],
+      "id": "2161c554-908b-46dd-a8c3-67af9a191d5e",
+      "name": "Build Refine Request",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:11434/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.refineRequest) }}",
+        "options": {
+          "timeout": 1500000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2688,
+        -96
+      ],
+      "id": "b06fad6a-e829-4c75-8eb9-4e4eb74e0863",
+      "name": "Refine Test Cases (Ollama)",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst context = $(\"Build Refine Request\").first().json;\nconst rawText = $input.first().json.message?.content;\n\nif (typeof rawText !== \"string\" || !rawText.trim()) {\n  throw new Error(\"Ollama response text is missing\");\n}\n\nlet out;\ntry {\n  out = JSON.parse(rawText.replace(/^```(?:json)?\\s*/i, \"\").replace(/\\s*```$/, \"\").trim());\n} catch (error) {\n  throw new Error(\"The model's answer could not be read: \" + error.message);\n}\n\nconst current = context.currentTestCases ?? [];\nconst { edits, removes } = context.refinePlan;\nconst isCase = (c) => c && typeof c === \"object\" && !Array.isArray(c);\n\nconst result = current.slice();\nconst changed = new Set();\nfor (const change of Array.isArray(out.update) ? out.update : []) {\n  if (!edits.includes(change?.number) || !isCase(change.testCase) || changed.has(change.number)) continue;\n  result[change.number - 1] = change.testCase;\n  changed.add(change.number);\n}\n\nconst added = (Array.isArray(out.add) ? out.add : []).filter(isCase);\nconst finalCases = result.filter((_, i) => !removes.includes(i + 1)).concat(added);\n\nif (finalCases.length === 0) {\n  throw new Error(\"That would remove every test case, so nothing was changed. Use Discard all instead.\");\n}\n\nconst plural = (n, word) => n + \" \" + word + (n === 1 ? \"\" : \"s\");\nconst counts = [];\nif (added.length) counts.push(\"added \" + plural(added.length, \"test case\"));\nif (changed.size) counts.push(\"rewrote \" + [...changed].sort((a, b) => a - b).map((n) => \"#\" + n).join(\", \"));\nif (removes.length) counts.push(\"removed \" + removes.map((n) => \"#\" + n).join(\", \"));\n\nconst modelSummary = typeof out.summary === \"string\" ? out.summary.trim() : \"\";\nlet refineSummary;\nif (counts.length === 0) {\n  refineSummary = \"Nothing was changed. Try describing the change more specifically.\";\n} else {\n  const done = counts.join(\"; \");\n  refineSummary = done.charAt(0).toUpperCase() + done.slice(1) + \".\" + (modelSummary ? \" \" + modelSummary : \"\");\n}\n\nconst { refineRequest, refinePlan, ...rest } = context;\n\nreturn [\n  {\n    json: {\n      ...rest,\n      message: { content: JSON.stringify({ testCases: finalCases }) },\n      refineSummary: refineSummary.slice(0, 900),\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2912,
+        -96
+      ],
+      "id": "fb55484f-d3e1-49d9-a148-a0e21daab89e",
+      "name": "Apply Refinement",
       "onError": "continueErrorOutput"
     }
   ],
@@ -502,7 +620,7 @@
       "main": [
         [
           {
-            "node": "List Scenarios (Ollama)",
+            "node": "Is Refine?",
             "type": "main",
             "index": 0
           }
@@ -562,6 +680,114 @@
         [
           {
             "node": "Check Generation Format",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Report Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Refine?": {
+      "main": [
+        [
+          {
+            "node": "Build Refine Plan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "List Scenarios (Ollama)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Refine Plan": {
+      "main": [
+        [
+          {
+            "node": "Plan Refinement (Ollama)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Report Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Refinement (Ollama)": {
+      "main": [
+        [
+          {
+            "node": "Build Refine Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Report Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Refine Request": {
+      "main": [
+        [
+          {
+            "node": "Refine Test Cases (Ollama)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Report Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refine Test Cases (Ollama)": {
+      "main": [
+        [
+          {
+            "node": "Apply Refinement",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Report Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Refinement": {
+      "main": [
+        [
+          {
+            "node": "Parse Generated Test Cases",
             "type": "main",
             "index": 0
           }

@@ -8,6 +8,7 @@ import {
   generationCallbackSchema,
   generationFailureSchema,
   listGenerationsQuerySchema,
+  refineDraftsSchema,
 } from "./generation.schemas.js";
 
 export function generationRouter({
@@ -73,6 +74,7 @@ export function generationRouter({
         req.params.runId,
         token,
         input.testCases,
+        input.summary,
       );
 
       res.status(200).json({
@@ -134,6 +136,32 @@ export function generationRouter({
       );
 
       res.json({ data: result });
+    }),
+  );
+
+  // AI chat: ask for a change to a batch that is waiting for review.
+  router.post(
+    "/:runId/refine",
+    asyncHandler(async (req, res) => {
+      const { instruction } = refineDraftsSchema.parse(req.body ?? {});
+
+      const result = await service.startRefinement(
+        req.params.projectId,
+        req.params.runId,
+        instruction,
+      );
+
+      res.status(202).json({ data: result });
+    }),
+  );
+
+  // AI chat history of a batch: each request, its status and the reply.
+  router.get(
+    "/:runId/refinements",
+    asyncHandler(async (req, res) => {
+      res.json(
+        await service.listRefinements(req.params.projectId, req.params.runId),
+      );
     }),
   );
 

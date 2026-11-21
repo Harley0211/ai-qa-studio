@@ -12,7 +12,9 @@ import {
   useDiscardDrafts,
   useGenerationRun,
   usePendingReviews,
+  useRefineChat,
 } from "./generation.hooks.js";
+import { RefineChat } from "./RefineChat.jsx";
 
 const plural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
 
@@ -31,11 +33,18 @@ function ReviewBatch({ projectId, run, onAccepted }) {
   const discard = useDiscardDrafts(projectId);
   const [selected, setSelected] = useState(null);
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+  const chat = useRefineChat(projectId, run.id, {
+    // The cases (and their positions) changed, so start from "all selected".
+    onApplied: () => {
+      setSelected(null);
+      toast.success("Generated test cases updated.");
+    },
+  });
 
   const drafts = data?.data?.drafts ?? [];
   // Everything is selected until the user changes the selection.
   const selection = selected ?? new Set(drafts.map((draft) => draft.index));
-  const busy = accept.isPending || discard.isPending;
+  const busy = accept.isPending || discard.isPending || chat.isRefining;
   const allSelected = drafts.length > 0 && selection.size === drafts.length;
 
   function toggle(index) {
@@ -142,6 +151,10 @@ function ReviewBatch({ projectId, run, onAccepted }) {
             </li>
           ))}
         </ul>
+      )}
+
+      {!isPending && !isError && drafts.length > 0 && (
+        <RefineChat chat={chat} disabled={accept.isPending || discard.isPending} />
       )}
 
       <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-3">

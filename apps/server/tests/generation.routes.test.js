@@ -606,3 +606,239 @@ describe("Reviewing generated test cases", () => {
     expect((await acceptDrafts(project.id, "unknown-run", [0])).status).toBe(404);
   });
 });
+
+describe("AI chat: refining generated test cases", () => {
+  async function refine(projectId, runId, instruction = "Add a test for a locked account") {
+    const callIndex = n8nClient.triggerGeneration.mock.calls.length;
+    const res = await api()
+      .post(`/api/projects/${projectId}/generations/${runId}/refine`)
+      .send({ instruction });
+    const payload = n8nClient.triggerGeneration.mock.calls[callIndex]?.[0];
+    return { res, payload };
+  }
+
+  const history = (projectId, runId) =>
+    api().get(`/api/projects/${projectId}/generations/${runId}/refinements`);
+
+  const drafts = async (projectId, runId) =>
+    (await api().get(`/api/projects/${projectId}/generations/${runId}`)).body.data.drafts;
+
+  const lockedAccount = {
+    title: "Login with a locked account",
+    steps: ["Open the login page", "Sign in as a locked user"],
+    expectedResult: "An 'account locked' message is shown.",
+  };
+
+  it("sends the batch's current cases and the instruction to n8n", async () => {
+    const project = await createProject();
+    const runId = await generateDrafts(project.id);
+
+    const { res, payload } = await refine(project.id, runId);
+
+    expect(res.status).toBe(202);
+    expect(res.body.data).toMatchObject({ status: "PENDING", projectId: project.id });
+    expect(res.body.data.id).not.toBe(runId);
+
+    expect(payload).toMatchObject({
+      mode: "REFINE",
+      runId: res.body.data.id,
+      message: "Add a test for a locked account",
+      instruction: "Add a test for a locked account",
+      generationFormat: "OVERALL",
+      history: [],
+      evidenceIds: [],
+      evidence: [],
+    });
+    expect(payload.currentTestCases).toHaveLength(2);
+    expect(payload.currentTestCases[0]).toMatchObject({
+      title: "Login with valid credentials",
+      steps: ["Open the login page", "Enter valid credentials", "Click Login"],
+    });
+    expect(payload.callbackUrl).toContain(`/generations/${res.body.data.id}/callback`);
+    expect(payload.callbackToken).toHaveLength(64);
+
+    const list = await history(project.id, runId);
+    expect(list.body.items).toEqual([
+      expect.objectContaining({
+        id: res.body.data.id,
+        status: "PENDING",
+        instruction: "Add a test for a locked account",
+        replySummary: null,
+      }),
+    ]);
+
+    // The chat request is not a batch of its own.
+    const pending = await api()
+      .get(`/api/projects/${project.id}/generations`)
+      .query({ review: "pending" });
+    expect(pending.body.items.map((run) => run.id)).toEqual([runId]);
+  });
+
+  it("replaces the batch's drafts with the changed cases and keeps the reply", async () => {
+    const project = await createProject();
+    const runId = await generateDrafts(project.id);
+    const { payload } = await refine(project.id, runId);
+
+    const callback = await sendCallback({
+      ...payload,
+      testCases: [...sampleTestCases, lockedAccount],
+    });
+    expect(callback.status).toBe(200);
+    expect(callback.body.data).toMatchObject({ status: "SUCCEEDED", draftCount: 3 });
+
+    // sendCallback sends no summary; send one through a second request.
+    const second = await refine(project.id, runId, "Remove the invalid password case");
+    const withSummary = await api()
+      .post(new URL(second.payload.callbackUrl).pathname)
+      .set("Authorization", `Bearer ${second.payload.callbackToken}`)
+      .send({
+        testCases: [sampleTestCases[0], lockedAccount],
+        summary: "Removed the invalid password case.",
+      });
+    expect(withSummary.status).toBe(200);
+
+    expect((await drafts(project.id, runId)).map((d) => d.title)).toEqual([
+      "Login with valid credentials",
+      "Login with a locked account",
+    ]);
+
+    const list = await history(project.id, runId);
+    expect(list.body.items.map((item) => [item.instruction, item.status, item.replySummary])).toEqual([
+      ["Add a test for a locked account", "SUCCEEDED", null],
+      ["Remove the invalid password case", "SUCCEEDED", "Removed the invalid password case."],
+    ]);
+
+    // Earlier exchanges are sent along so the model has the conversation.
+    expect(second.payload.history).toEqual([
+      { instruction: "Add a test for a locked account", reply: "" },
+    ]);
+
+    // Accepting uses the changed drafts.
+    const accepted = await acceptDrafts(project.id, runId, [1]);
+    expect(accepted.body.data.caseIds).toEqual(["TC-0001"]);
+    const saved = await prisma.testCase.findFirst({ where: { projectId: project.id } });
+    expect(saved.title).toBe("Login with a locked account");
+  });
+
+  it("allows one change at a time per batch", async () => {
+    const project = await createProject();
+    const runId = await generateDrafts(project.id);
+    await refine(project.id, runId);
+
+    const { res } = await refine(project.id, runId, "Another change");
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe("REFINEMENT_IN_PROGRESS");
+  });
+
+  it("does not change a batch that was reviewed while the change was running", async () => {
+    const project = await createProject();
+    const runId = await generateDrafts(project.id);
+    const { payload } = await refine(project.id, runId);
+
+    await acceptDrafts(project.id, runId, [0]);
+
+    const callback = await sendCallback({ ...payload, testCases: [lockedAccount] });
+    expect(callback.status).toBe(200);
+    expect(callback.body.data.status).toBe("FAILED");
+
+    const [item] = (await history(project.id, runId)).body.items;
+    expect(item).toMatchObject({
+      status: "FAILED",
+      error: "The test cases were reviewed before this change finished, so it was not applied",
+    });
+
+    const saved = await prisma.testCase.findMany({ where: { projectId: project.id } });
+    expect(saved.map((c) => c.title)).toEqual(["Login with valid credentials"]);
+
+    // A reviewed batch can't be changed any more.
+    const { res } = await refine(project.id, runId);
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe("ALREADY_REVIEWED");
+  });
+
+  it("marks the change failed when n8n reports an error, and allows a new one", async () => {
+    const project = await createProject();
+    const runId = await generateDrafts(project.id);
+    const { payload } = await refine(project.id, runId);
+
+    await api()
+      .post(new URL(payload.callbackUrl).pathname.replace(/callback$/, "failure"))
+      .set("Authorization", `Bearer ${payload.callbackToken}`)
+      .send({ error: "Build Refine Request: Could not work out what to change" });
+
+    const [item] = (await history(project.id, runId)).body.items;
+    expect(item).toMatchObject({
+      status: "FAILED",
+      error: "Couldn't make this change: Could not work out what to change",
+    });
+    expect(await drafts(project.id, runId)).toHaveLength(2);
+
+    expect((await refine(project.id, runId)).res.status).toBe(202);
+  });
+
+  it("closes a change that never comes back, so the chat is not stuck", async () => {
+    const project = await createProject();
+    const runId = await generateDrafts(project.id);
+    const { res } = await refine(project.id, runId);
+
+    await prisma.generationRun.update({
+      where: { id: res.body.data.id },
+      data: { callbackTokenExpiresAt: new Date(Date.now() - 1000) },
+    });
+
+    const [item] = (await history(project.id, runId)).body.items;
+    expect(item.status).toBe("FAILED");
+    expect((await refine(project.id, runId)).res.status).toBe(202);
+  });
+
+  it("returns an error and records the failure when n8n is unavailable", async () => {
+    const project = await createProject();
+    const runId = await generateDrafts(project.id);
+
+    n8nClient.triggerGeneration.mockRejectedValueOnce(
+      Object.assign(new Error("Unable to connect to n8n"), {
+        code: "N8N_CONNECTION_ERROR",
+        status: 502,
+      }),
+    );
+
+    const { res } = await refine(project.id, runId);
+    expect(res.status).toBe(502);
+
+    const [item] = (await history(project.id, runId)).body.items;
+    expect(item.status).toBe("FAILED");
+  });
+
+  it("sends per-step batches as per-step and splits numbered step text", async () => {
+    const project = await createProject();
+    const runId = await generateDrafts(project.id, [
+      {
+        title: "Per-step login",
+        steps: "1. Open page\n2. Submit",
+        stepExpectedResults: ["Page opens", "Dashboard shows"],
+      },
+    ]);
+
+    const { payload } = await refine(project.id, runId);
+
+    expect(payload.generationFormat).toBe("PER_STEP");
+    expect(payload.currentTestCases[0]).toMatchObject({
+      steps: ["Open page", "Submit"],
+      stepExpectedResults: ["Page opens", "Dashboard shows"],
+    });
+  });
+
+  it("validates the request", async () => {
+    const project = await createProject();
+    const runId = await generateDrafts(project.id);
+
+    expect((await refine(project.id, runId, "   ")).res.status).toBe(400);
+    expect((await refine(project.id, runId, "x".repeat(1001))).res.status).toBe(400);
+    expect((await refine(project.id, "unknown-run")).res.status).toBe(404);
+    expect((await history(project.id, "unknown-run")).status).toBe(404);
+
+    // A chat request is not itself a batch that can be refined.
+    const { res } = await refine(project.id, runId);
+    expect((await refine(project.id, res.body.data.id)).res.status).toBe(404);
+  });
+});

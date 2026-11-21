@@ -55,6 +55,22 @@ reviewed:
   discarded drafts leave no gaps.
 - The Evidence and Test cases tabs show a banner while batches are waiting.
 
+### Refine with AI (chat)
+Each batch waiting for review has a **Refine with AI** box. Describe a change in
+plain words ("add 2 negative test cases for the phone number field", "remove
+the country dropdown cases", "make the steps of test case 1 more detailed") and
+the batch's drafts are updated in place:
+
+- The model first works out *what* to change (add, rewrite or remove) and
+  *which* cases; removals are applied by code, and the model only writes the
+  rewritten or new cases. Cases the request doesn't mention stay exactly as
+  they were.
+- Each reply says what changed ("Added 2 test cases", "Removed #7") plus the
+  model's own short summary. Earlier requests are sent along as context.
+- One change at a time per batch; adding to the library is paused while a
+  change runs. Typical changes take 5–40 seconds on the local model.
+- Refining uses the cases' text only, not the original screenshots.
+
 ### Test case library
 The project's **Test cases** tab:
 
@@ -186,6 +202,8 @@ All routes are under `/api/projects/:projectId`.
 | `GET /generations?review=pending` | Batches waiting for review |
 | `GET /generations/:runId` | Run status, drafts and source |
 | `POST /generations/:runId/accept`, `POST /generations/:runId/discard` | Review a batch |
+| `POST /generations/:runId/refine` | AI chat: ask for a change to a batch (`{ instruction }`) |
+| `GET /generations/:runId/refinements` | AI chat history of a batch, with each reply |
 | `POST /generations/:runId/callback`, `POST /generations/:runId/failure` | Used by n8n (one-time Bearer token) |
 
 ## 6. Execution progress
@@ -222,6 +240,11 @@ the filtered list.
   service code removed; broken dash character in the delete dialog; neutral
   "file too large" message.
 - **Database migrations:** `add_generation_drafts`, `add_documents`.
+- **Phase 4 (AI chat):** *Refine with AI* on every review batch; n8n REFINE
+  branch (plan → targeted rewrite → apply); migration `add_refinements`.
+- **Evidence-sized generation:** the number of generated cases follows the
+  evidence (scenario list first, then exactly that many cases) instead of a
+  fixed ~11.
 
 ### Earlier
 - Test case management: library, details, create/edit, execution status,
@@ -232,8 +255,8 @@ the filtered list.
 
 | Suite | Files | Tests |
 |---|---:|---:|
-| Server (`apps/server/tests`) | 11 | 163 |
-| Web (`apps/web/src/**/*.test.*`) | 13 | 90 |
+| Server (`apps/server/tests`) | 11 | 172 |
+| Web (`apps/web/src/**/*.test.*`) | 13 | 94 |
 
 Server tests run against a separate SQLite database (`test.db`) that is rebuilt
 on every run; n8n is mocked. Web tests mock the API with `mockApi` from
@@ -244,12 +267,15 @@ on every run; n8n is mocked. Web tests mock the API with `mockApi` from
 - **Documents:** scanned PDFs (no selectable text) and Word files are not
   supported. PDFs whose headings are only bold text, without numbers, become a
   single section.
-- **Model quality:** the small local model sometimes repeats itself or ignores
-  the requested number of cases. Exact repeats are removed; cases that say the
-  same thing with different titles must be unticked in review.
+- **Model quality:** the small local model sometimes writes weak or
+  contradictory cases (for example a "phone number is required" case for an
+  optional field). Exact repeats are removed; review every batch before adding
+  it, and use *Refine with AI* to fix it.
 - **Per-step results** can't be edited in the test case form yet.
-- **Not built yet:** AI chat for refining results (plan Phase 4), login and
-  accounts (plan Phase 5), and recent activity on the Overview.
+- **Not built yet:** login and accounts (plan Phase 5), and recent activity on
+  the Overview.
+- **Low-memory machines:** with Ollama loaded, the web test suite can run out of
+  memory on 8 GB; run it with `npx vitest run --maxWorkers=2` in `apps/web`.
 - **n8n** shows runs whose failure was reported to the app as successful
   executions in its own list; the app shows the real outcome.
 - **Dependencies:** `npm audit` reports issues in existing packages (vitest,

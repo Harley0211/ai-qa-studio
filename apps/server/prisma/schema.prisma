@@ -70,10 +70,17 @@ model GenerationRun {
   // Set when the run was generated from a document section.
   documentId     String?
   sectionTitle   String?
+  // Set on a refinement run (AI chat): the review batch it changes, the
+  // user's instruction, and the model's short reply about what it changed.
+  refinesRunId   String?
+  instruction    String?
+  replySummary   String?
 
   project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
   document  Document?  @relation(fields: [documentId], references: [id], onDelete: SetNull)
   testCases TestCase[]
+
+  @@index([refinesRunId])
 
   @@index([projectId, createdAt])
   @@index([status])

@@ -4,7 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useToast } from "../../components/ui/Toast.jsx";
 import { api } from "../../lib/apiClient.js";
 import { projectKeys } from "../projects/hooks.js";
@@ -35,6 +35,7 @@ export const generationKeys = {
   all: (projectId) => ["generations", projectId],
   detail: (projectId, runId) => ["generations", projectId, runId],
   pendingReview: (projectId) => ["generations", projectId, "pending-review"],
+  refinements: (projectId, runId) => ["generations", projectId, runId, "refinements"],
 };
 
 const generationsUrl = (projectId) =>
@@ -74,6 +75,62 @@ export function useDiscardDrafts(projectId) {
   return useReviewMutation(projectId, (runId) =>
     api.post(`${generationsUrl(projectId)}/${encodeURIComponent(runId)}/discard`),
   );
+}
+
+// AI chat for one review batch: the conversation so far, sending a new
+// request, and refreshing the batch's drafts when a change has been applied.
+export function useRefineChat(projectId, runId, { onApplied } = {}) {
+  const queryClient = useQueryClient();
+  const runUrl = `${generationsUrl(projectId)}/${encodeURIComponent(runId)}`;
+
+  const history = useQuery({
+    queryKey: generationKeys.refinements(projectId, runId),
+    queryFn: () => api.get(`${runUrl}/refinements`),
+    enabled: Boolean(projectId && runId),
+    refetchInterval: (query) =>
+      query.state.data?.items?.some((item) => item.status === "PENDING") ? 2000 : false,
+  });
+
+  const send = useMutation({
+    mutationFn: (instruction) => api.post(`${runUrl}/refine`, { instruction }),
+    onSettled: () =>
+      queryClient.invalidateQueries({
+        queryKey: generationKeys.refinements(projectId, runId),
+      }),
+  });
+
+  const items = history.data?.items ?? [];
+  const isRefining = send.isPending || items.some((item) => item.status === "PENDING");
+
+  // Notice when a request we saw running has finished.
+  const seenPending = useRef(new Set());
+  const onAppliedRef = useRef(onApplied);
+  onAppliedRef.current = onApplied;
+  const statusKey = items.map((item) => `${item.id}:${item.status}`).join(",");
+
+  useEffect(() => {
+    for (const item of items) {
+      if (item.status === "PENDING") {
+        seenPending.current.add(item.id);
+      } else if (seenPending.current.has(item.id)) {
+        seenPending.current.delete(item.id);
+        if (item.status === "SUCCEEDED") {
+          queryClient.invalidateQueries({ queryKey: generationKeys.detail(projectId, runId) });
+          queryClient.invalidateQueries({ queryKey: generationKeys.pendingReview(projectId) });
+          onAppliedRef.current?.(item);
+        }
+      }
+    }
+    // statusKey captures every change to the items.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusKey, projectId, runId, queryClient]);
+
+  return {
+    items,
+    isRefining,
+    historyError: history.isError,
+    send,
+  };
 }
 
 export function useGenerateTestCases(projectId) {
