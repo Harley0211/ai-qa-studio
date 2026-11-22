@@ -12,8 +12,8 @@ const FAILED_LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const invalidCredentials = () =>
   new ApiError(401, "INVALID_CREDENTIALS", "Email or password is incorrect");
 
-// Slows down password guessing: after too many failures for one email,
-// sign-in for that email is refused for a while (kept in memory).
+// Slows down password guessing: after too many failures for one key (visitor and email),
+// sign-in for that key is refused for a while (kept in memory).
 function createLoginThrottle() {
   const failures = new Map();
 
@@ -79,7 +79,7 @@ export function authRouter({ prisma, sessions }) {
         });
       });
 
-      await sessions.create(res, user.id);
+      await sessions.create(req, res, user.id);
       res.status(201).json({ user: publicUser(user) });
     }),
   );
@@ -88,7 +88,10 @@ export function authRouter({ prisma, sessions }) {
     "/login",
     asyncHandler(async (req, res) => {
       const { email, password } = loginSchema.parse(req.body ?? {});
-      throttle.check(email);
+      // Counted per visitor (IP) and email, so someone guessing from elsewhere
+      // can't lock the real user out of their own account.
+      const attemptKey = `${req.ip}|${email}`;
+      throttle.check(attemptKey);
 
       const user = await prisma.user.findUnique({ where: { email } });
       const ok = user
@@ -96,12 +99,12 @@ export function authRouter({ prisma, sessions }) {
         : await burnPasswordCheck(password);
 
       if (!ok) {
-        throttle.fail(email);
+        throttle.fail(attemptKey);
         throw invalidCredentials();
       }
 
-      throttle.succeed(email);
-      await sessions.create(res, user.id);
+      throttle.succeed(attemptKey);
+      await sessions.create(req, res, user.id);
       res.json({ user: publicUser(user) });
     }),
   );

@@ -5,7 +5,7 @@ requirements documents (PRDs) into test cases with a local AI model, lets you
 review and refine them before they are saved, and then manage, run and export
 them per project. Team members sign in; everyone works on all projects.
 
-**Status (22 Nov 2026):** 296 automated tests pass (192 server, 104 web) and the
+**Status (22 Nov 2026):** 301 automated tests pass (197 server, 104 web) and the
 production build succeeds.
 
 ---
@@ -186,6 +186,192 @@ regeneration fails with `EPERM` otherwise.
 | `npm run db:generate` | Regenerates the Prisma client |
 | `npm run db:studio` | Opens Prisma Studio to browse the database |
 
+### Going live (public link from this computer)
+
+The app can be shared at a public https address while it runs on this
+computer, using a free Cloudflare quick tunnel. The AI (Ollama) and n8n stay
+local; only the app's port is shared.
+
+1. **Create the admin account first** (open the app locally once). The first
+   person to open a fresh install becomes admin.
+2. In `apps/server/.env`:
+   ```ini
+   WEB_DIST_DIR=../web/dist
+   PUBLIC_HOSTS=.trycloudflare.com
+   ```
+   then restart the server. It now also serves the built web app at
+   http://127.0.0.1:4000.
+3. Build the web app and start the tunnel (or run the VS Code task
+   **Public link (tunnel)**, which does both):
+   ```cmd
+   npm run build
+   "C:\Program Files (x86)\cloudflared\cloudflared.exe" tunnel --no-autoupdate --url http://127.0.0.1:4000
+   ```
+   It prints the public link, `https://<random-words>.trycloudflare.com`.
+4. Add your team on the **Users** page and send them the link.
+
+Notes:
+- The link only works while this computer, the server, n8n and Ollama are
+  running, and it **changes every time the tunnel restarts**. A fixed address
+  needs your own domain on a free Cloudflare account (named tunnel).
+- Over the tunnel the session cookie is `Secure`, HSTS is on, and the page's
+  Content Security Policy forbids inline scripts.
+- Failed sign-ins are limited per visitor and email, so someone guessing from
+  elsewhere can't lock you out.
+- Quick tunnels are meant for testing and small use; Cloudflare gives no uptime
+  guarantee for them.
+
+### Run it live on another computer (step by step, e.g. the office PC)
+
+Everything below is typed in **PowerShell** on the other computer unless it
+says otherwise. Steps marked *(first time only)* can be skipped on a computer
+that already ran the app before.
+
+> **Company computer?** Check with IT before step 9. Some company networks or
+> security tools block tunnels like Cloudflare's, and sharing a company machine
+> on the internet may need approval. Only real test data should go into a
+> publicly reachable app.
+
+**1. Install the tools** *(first time only)*
+
+- **Node.js 20.12 or newer** (LTS): `winget install OpenJS.NodeJS.LTS`, then
+  close and reopen PowerShell. Check with `node -v`.
+- **Git**: `winget install Git.Git`.
+- **Ollama** (the AI): `winget install Ollama.Ollama`.
+- **n8n**: `npm install -g n8n`.
+- **cloudflared** (the tunnel): `winget install Cloudflare.cloudflared`.
+  Windows asks for administrator permission; click **Yes**.
+
+**2. Get the code**
+
+- First time:
+  ```powershell
+  cd $HOME\Documents
+  git clone https://github.com/Harley0211/ai-qa-studio.git
+  cd ai-qa-studio
+  ```
+- Already have it: open the folder, then
+  ```powershell
+  git switch main
+  git pull
+  ```
+
+**3. Install packages and update the database**
+
+Stop the app first if it is running (the server locks Prisma's files).
+
+```powershell
+npm install
+npm run db:generate
+npm run db:migrate
+```
+
+`db:migrate` adds anything new to the database (for example the users and AI
+chat tables) and keeps your existing projects and test cases.
+
+**4. Server settings** (`apps\server\.env`)
+
+- First time: `copy apps\server\.env.example apps\server\.env`
+- Make two random secrets (run the command twice, one per secret):
+  ```powershell
+  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  ```
+- Open `apps\server\.env` and make sure these are set (keep any lines that are
+  already there):
+  ```ini
+  N8N_WEBHOOK_URL=http://localhost:5678/webhook/ai-qa-studio/generate
+  N8N_REQUEST_SECRET=<first secret>
+  EVIDENCE_SIGNING_SECRET=<second secret>
+  PUBLIC_BACKEND_URL=http://127.0.0.1:4000
+  WEB_DIST_DIR=../web/dist
+  PUBLIC_HOSTS=.trycloudflare.com
+  ```
+  Never commit this file; it is ignored by git on purpose.
+
+**5. The AI model** *(first time only)*
+
+```powershell
+ollama pull qwen3-vl:2b-instruct
+```
+
+About 2 GB. Ollama then runs in the background (tray icon) and answers on
+`http://127.0.0.1:11434`.
+
+**6. n8n workflow** (first time, and again whenever `n8n/ai-qa-studio-generation.workflow.json` changes)
+
+1. Start n8n: `n8n start`, then open http://localhost:5678 (create the n8n
+   owner account the first time).
+2. **Workflows → Import from File** → choose
+   `n8n\ai-qa-studio-generation.workflow.json`. If an older "AI QA Studio"
+   workflow exists, delete or deactivate it first, because both use the same
+   webhook address.
+3. Open the **Webhook** node → *Credential* → create **Header Auth**:
+   - Name: `X-AQS-Request-Secret`
+   - Value: the same value as `N8N_REQUEST_SECRET` in step 4
+4. Save, then **Activate/Publish** the workflow (toggle in the top bar).
+
+More detail: [n8n/README.md](n8n/README.md).
+
+**7. Build the web app and start the server**
+
+Keep n8n running (step 6). In a new PowerShell window, in the project folder:
+
+```powershell
+npm run build
+npm run dev:server
+```
+
+Open **http://127.0.0.1:4000**. It should show the AI QA Studio page.
+(Alternatively open the folder in VS Code and run the tasks **n8n** and
+**Server** from *Terminal → Run Task*.)
+
+**8. Create the admin account BEFORE going public**
+
+On a computer that has never been used with sign-in, the page asks you to
+**Create the admin account**. Do it now, locally. The first person to open a
+fresh install becomes admin, so this must not be left for a stranger.
+Then use **Users** (sidebar → Admin) to add your teammates.
+
+**9. Start the public link**
+
+In another PowerShell window (or VS Code task **Public link (tunnel)**):
+
+```powershell
+& "C:\Program Files (x86)\cloudflared\cloudflared.exe" tunnel --no-autoupdate --url http://127.0.0.1:4000
+```
+
+After a few seconds it prints a box with an address like
+`https://some-random-words.trycloudflare.com`. That is the live link: open it,
+sign in, and send it to your team.
+
+**10. Check it works**
+
+- The live link shows the sign-in page, and your account can sign in.
+- In a project, generate test cases from a screenshot or document: the run
+  should finish and show cases to review (needs Ollama and n8n running).
+
+**Every day after that**
+
+1. Start Ollama (usually already running), then `n8n start`.
+2. `npm run dev:server` (after `git pull`, run steps 3 and 7 again first).
+3. Start the tunnel (step 9) and share the **new** link (it changes each time).
+
+To stop being public, close the tunnel window (Ctrl+C). The app keeps working
+locally.
+
+**If something goes wrong**
+
+| Problem | Fix |
+|---|---|
+| `EPERM` during `npm install` / `db:generate` | Stop the server first, then retry. |
+| Live link says "Requests must use a localhost address" | `PUBLIC_HOSTS=.trycloudflare.com` is missing in `.env`, or the server wasn't restarted. |
+| Live link shows "Cannot GET /" | `WEB_DIST_DIR=../web/dist` missing, or `npm run build` not run. |
+| Generation fails with "n8n integration is not configured" | `N8N_WEBHOOK_URL` / `N8N_REQUEST_SECRET` missing in `.env`. |
+| Generation fails with 401 / 403 from n8n | The Header Auth value in n8n differs from `N8N_REQUEST_SECRET`. |
+| Generation fails mentioning Ollama | Ollama not running, or the model not pulled (step 5). |
+| "Too many failed sign-in attempts" | Wait 15 minutes, or ask an admin to reset your password. |
+| Forgot the only admin password | Locally run `npx prisma studio` in `apps\server`, delete the `User` rows, and create the admin again (step 8). |
+
 ## 4. Limits
 
 | What | Limit |
@@ -281,7 +467,7 @@ the filtered list.
 
 | Suite | Files | Tests |
 |---|---:|---:|
-| Server (`apps/server/tests`) | 12 | 192 |
+| Server (`apps/server/tests`) | 13 | 197 |
 | Web (`apps/web/src/**/*.test.*`) | 14 | 104 |
 
 Server tests run against a separate SQLite database (`test.db`) that is rebuilt

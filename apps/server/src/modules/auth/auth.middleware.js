@@ -35,6 +35,15 @@ export function requireAdmin(req, _res, next) {
   next();
 }
 
+// A page served by this same address (e.g. the built app behind a tunnel).
+function isSameOrigin(origin, req) {
+  try {
+    return new URL(origin).host === req.headers.host;
+  } catch {
+    return false;
+  }
+}
+
 // Extra protection for cookie-based sign-in: a browser request that changes
 // something must come from one of the app's own origins. (Requests without an
 // Origin header, such as n8n's callbacks, are not browser requests.)
@@ -42,7 +51,9 @@ export function originGuard(allowedOrigins) {
   const allowed = new Set(allowedOrigins);
   return (req, _res, next) => {
     const origin = req.headers.origin;
-    if (SAFE_METHODS.has(req.method) || !origin || allowed.has(origin)) return next();
+    if (SAFE_METHODS.has(req.method) || !origin || allowed.has(origin) || isSameOrigin(origin, req)) {
+      return next();
+    }
     next(new ApiError(403, "FORBIDDEN_ORIGIN", "Requests must come from the app itself"));
   };
 }

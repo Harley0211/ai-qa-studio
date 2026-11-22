@@ -33,6 +33,15 @@ const schema = z.object({
     .max(3600)
     .default(300),
   EVIDENCE_SIGNING_SECRET: z.string().min(32).optional(),
+  // Sharing the app through a tunnel or reverse proxy (see README "Going live"):
+  // the built web app to serve from this server (relative to apps/server)...
+  WEB_DIST_DIR: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().optional(),
+  ),
+  // ...and the public host names allowed besides localhost. An entry that
+  // starts with "." allows every host ending with it (".trycloudflare.com").
+  PUBLIC_HOSTS: z.string().default(""),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -56,5 +65,8 @@ export const env = Object.freeze({
       : undefined),
   corsOrigins: parsed.data.CORS_ORIGIN.split(",")
     .map((s) => s.trim())
+    .filter(Boolean),
+  publicHosts: parsed.data.PUBLIC_HOSTS.split(",")
+    .map((s) => s.trim().toLowerCase())
     .filter(Boolean),
 });

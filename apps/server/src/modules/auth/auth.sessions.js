@@ -40,7 +40,11 @@ function cookieOptions(secure) {
 }
 
 export function createSessionStore({ prisma, secureCookies = false }) {
-  async function create(res, userId) {
+  // Secure cookies in production, and whenever the browser came in over https
+  // (e.g. through a tunnel; see "trust proxy" in app.js).
+  const secureFor = (req) => secureCookies || Boolean(req.secure);
+
+  async function create(req, res, userId) {
     const token = randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
 
@@ -50,7 +54,7 @@ export function createSessionStore({ prisma, secureCookies = false }) {
       data: { tokenHash: hashToken(token), userId, expiresAt },
     });
 
-    res.cookie(SESSION_COOKIE, token, { ...cookieOptions(secureCookies), expires: expiresAt });
+    res.cookie(SESSION_COOKIE, token, { ...cookieOptions(secureFor(req)), expires: expiresAt });
     return token;
   }
 
@@ -73,7 +77,7 @@ export function createSessionStore({ prisma, secureCookies = false }) {
     if (token) {
       await prisma.session.deleteMany({ where: { tokenHash: hashToken(token) } });
     }
-    res.clearCookie(SESSION_COOKIE, cookieOptions(secureCookies));
+    res.clearCookie(SESSION_COOKIE, cookieOptions(secureFor(req)));
   }
 
   // Signs a user out everywhere, optionally keeping one session (the caller's).

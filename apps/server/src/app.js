@@ -16,6 +16,10 @@ import { healthRouter } from "./modules/health/health.routes.js";
 import { projectsRouter } from "./modules/projects/projects.routes.js";
 import { DEFAULT_STORAGE_ROOT } from "./modules/evidence/evidence.storage.js";
 import { createN8nClient } from "./modules/generation/generation.n8n.js";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 // App factory: dependencies are injected so tests can build isolated instances.
 export function createApp({
@@ -32,9 +36,12 @@ export function createApp({
       requestSecret: env.N8N_REQUEST_SECRET,
     });
   app.disable("x-powered-by");
+  // Behind a tunnel or reverse proxy on this machine, trust its
+  // X-Forwarded-* headers (https, client IP). Nothing else can set them.
+  app.set("trust proxy", "loopback");
 
   app.use(helmet());
-  app.use(hostGuard());
+  app.use(hostGuard(env.publicHosts ?? []));
   app.use(
     cors({
       origin: env.corsOrigins,
@@ -76,6 +83,29 @@ export function createApp({
   );
 
   app.use("/api", notFoundHandler);
+
+  // Going live: serve the built web app from this same address, so a tunnel
+  // or proxy only needs to forward one port. (In development Vite serves it.)
+  if (env.WEB_DIST_DIR) {
+    const webDist = path.resolve(SERVER_ROOT, env.WEB_DIST_DIR);
+    app.use(
+      express.static(webDist, {
+        index: false,
+        // Built asset names change with their content, so they can be cached.
+        setHeaders: (res, filePath) => {
+          if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+            res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+          }
+        },
+      }),
+    );
+    // Every other path is a page of the single-page app.
+    app.get(/^(?!\/api(\/|$)).*/, (_req, res) => {
+      res.setHeader("Cache-Control", "no-cache");
+      res.sendFile(path.join(webDist, "index.html"));
+    });
+  }
+
   app.use(errorHandler);
   return app;
 }

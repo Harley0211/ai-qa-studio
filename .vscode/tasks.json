@@ -1,0 +1,45 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Server",
+      "type": "shell",
+      "command": "npm run dev:server",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "group": "aqs", "panel": "dedicated" }
+    },
+    {
+      "label": "Web",
+      "type": "shell",
+      "command": "npm run dev:web",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "group": "aqs", "panel": "dedicated" }
+    },
+    {
+      "label": "n8n",
+      "type": "shell",
+      "command": "n8n.cmd start",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "group": "aqs", "panel": "dedicated" }
+    },
+    {
+      "label": "Public link (tunnel)",
+      "detail": "Rebuild the web app, then share http://127.0.0.1:4000 at a https://...trycloudflare.com link (printed in this terminal).",
+      "type": "shell",
+      "command": "npm run build; & 'C:\\Program Files (x86)\\cloudflared\\cloudflared.exe' tunnel --no-autoupdate --url http://127.0.0.1:4000",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "group": "aqs", "panel": "dedicated" }
+    },
+    {
+      "label": "Start all",
+      "dependsOn": ["Server", "Web", "n8n"],
+      "dependsOrder": "parallel",
+      "problemMatcher": [],
+      "runOptions": { "runOn": "folderOpen" }
+    }
+  ]
+}
