@@ -8,7 +8,8 @@ describe('Projects dashboard', () => {
     mockApi({ 'GET /api/projects': { items: [project({ urlCount: 2 })], total: 1 } });
     renderRoute('/projects');
 
-    expect(screen.getByText('Loading projects…')).toBeInTheDocument();
+    // The page appears once the sign-in check has finished.
+    expect(await screen.findByText('Loading projects…')).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Alpha' })).toBeInTheDocument();
     expect(screen.getByText('First project')).toBeInTheDocument();
     expect(screen.getAllByText('2 URLs').length).toBeGreaterThan(0);

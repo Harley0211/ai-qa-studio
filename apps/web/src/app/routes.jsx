@@ -12,11 +12,20 @@ import ImageToTestCasesPage from "../features/tools/ImageToTestCasesPage.jsx";
 import PrdToTestCasesPage from "../features/tools/PrdToTestCasesPage.jsx";
 import { IMAGE_TOOL_PATH, PRD_TOOL_PATH } from "../features/tools/paths.js";
 import DocumentsTab from "../features/documents/DocumentsTab.jsx";
+import { AuthGate } from "../features/auth/AuthGate.jsx";
+import UsersPage from "../features/auth/UsersPage.jsx";
 
 export function AppRoutes() {
   return (
     <Routes>
-      <Route element={<AppLayout />}>
+      <Route
+        element={
+          <AuthGate>
+            <AppLayout />
+          </AuthGate>
+        }
+      >
+        <Route path="/users" element={<UsersPage />} />
         <Route path="/" element={<Navigate to="/projects" replace />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/projects/:projectId" element={<ProjectWorkspace />}>

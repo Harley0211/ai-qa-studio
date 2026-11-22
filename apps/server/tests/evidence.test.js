@@ -3,13 +3,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, existsSync, readdirSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import request from "supertest";
 
 import { createApp } from "../src/app.js";
 import { env } from "../src/config/env.js";
 import { resolveStoragePath } from "../src/modules/evidence/evidence.storage.js";
 import {
   api as projectApi,
+  apiFor,
   createProject,
   prisma,
   resetDb,
@@ -19,7 +19,7 @@ import { removeProjectStorage } from "../src/modules/evidence/evidence.storage.j
 const storageRoot = mkdtempSync(path.join(os.tmpdir(), "aqs-evidence-tests-"));
 
 const app = createApp({ prisma, env, storageRoot });
-const api = () => request(app);
+const api = () => apiFor(app);
 
 const pngBuffer = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 

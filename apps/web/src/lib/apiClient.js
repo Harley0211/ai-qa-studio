@@ -8,6 +8,13 @@ export class ApiClientError extends Error {
   }
 }
 
+let onUnauthenticated = null;
+
+// Called whenever the server says the request needs a sign-in.
+export function setUnauthenticatedHandler(handler) {
+  onUnauthenticated = handler;
+}
+
 async function request(path, { method = "GET", body } = {}) {
   let res;
 
@@ -46,6 +53,11 @@ async function request(path, { method = "GET", body } = {}) {
 
   if (!res.ok) {
     const err = payload?.error;
+    // The session ended (signed out elsewhere, expired, password reset):
+    // let the app show the sign-in screen.
+    if (res.status === 401 && err?.code === "UNAUTHENTICATED") {
+      onUnauthenticated?.();
+    }
     throw new ApiClientError({
       status: res.status,
       code: err?.code ?? "HTTP_ERROR",

@@ -8,6 +8,32 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// A person who can sign in. Everyone signed in works on all projects (shared
+// team); admins can also add, change and remove users.
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique // stored lowercased
+  name         String
+  passwordHash String    // scrypt, see src/modules/auth/auth.passwords.js
+  role         String    @default("MEMBER") // "ADMIN" or "MEMBER"
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  sessions     Session[]
+}
+
+// A signed-in browser. Only a hash of the cookie token is stored.
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
 model Project {
   id          String          @id @default(cuid())
   name        String

@@ -7,7 +7,7 @@ const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1"]);
 if (!LOOPBACK.has(env.HOST)) {
   console.error(
     `Refusing to start: HOST="${env.HOST}" is not a loopback address. ` +
-      "This single-user version must only listen on 127.0.0.1.",
+      "This local version must only listen on 127.0.0.1 (put a reverse proxy in front to share it).",
   );
   process.exit(1);
 }

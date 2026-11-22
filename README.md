@@ -1,11 +1,11 @@
 # AI QA Studio
 
-AI QA Studio is a local, single-user tool for QA work. It turns screenshots and
+AI QA Studio is a QA tool for a small team. It turns screenshots and
 requirements documents (PRDs) into test cases with a local AI model, lets you
-review them before they are saved, and then manage, run and export them per
-project.
+review and refine them before they are saved, and then manage, run and export
+them per project. Team members sign in; everyone works on all projects.
 
-**Status (20 Nov 2026):** 253 automated tests pass (163 server, 90 web) and the
+**Status (22 Nov 2026):** 296 automated tests pass (192 server, 104 web) and the
 production build succeeds.
 
 ---
@@ -85,6 +85,17 @@ The project's **Test cases** tab:
 - A project-wide summary and progress bar ignore the current search and filter
   (see [Execution progress](#6-execution-progress)).
 
+### Sign-in and users
+- **First run:** the first person to open the app creates the **admin**
+  account. After that, sign-up is closed.
+- **Users page (admins):** add people (name, email, starting password, role),
+  rename them, change their role, reset a password (signs them out
+  everywhere) or remove them. The app always keeps at least one admin, and you
+  can't remove yourself.
+- **Everyone:** sees and works on all projects (shared team), can change their
+  own password (signs out their other browsers) and sign out from the sidebar.
+- Forgotten password: an admin resets it on the Users page.
+
 ### Other
 - **Dark mode:** toggle in the sidebar (or the top bar on small screens). The
   choice is remembered; until then the app follows the operating system.
@@ -157,7 +168,7 @@ Web app ──POST /generations──▶ Server ──webhook──▶ n8n ─�
    npm run dev
    ```
 
-   Open http://127.0.0.1:5173.
+   Open http://127.0.0.1:5173. The first time, create the admin account.
 
 **Windows note:** stop the dev server before `npm install` or
 `npm run db:generate`. The running server locks Prisma's engine file, and
@@ -189,7 +200,19 @@ regeneration fails with `EPERM` otherwise.
 
 ## 5. API overview
 
-All routes are under `/api/projects/:projectId`.
+Sign-in (`/api/auth`) and users (`/api/users`, admins only):
+
+| Method and path | Purpose |
+|---|---|
+| `GET /api/auth/status` | `{ setupRequired, user }` (no sign-in needed) |
+| `POST /api/auth/setup` | First run only: create the first admin and sign in |
+| `POST /api/auth/login`, `POST /api/auth/logout` | Sign in / out (session cookie) |
+| `POST /api/auth/password` | Change your own password |
+| `GET`/`POST /api/users`, `PATCH`/`DELETE /api/users/:id` | Manage users (admin) |
+
+Everything below needs a signed-in user, except n8n's callbacks and signed
+screenshot downloads, which use their own one-time tokens. All routes are under
+`/api/projects/:projectId`.
 
 | Method and path | Purpose |
 |---|---|
@@ -245,6 +268,9 @@ the filtered list.
 - **Evidence-sized generation:** the number of generated cases follows the
   evidence (scenario list first, then exactly that many cases) instead of a
   fixed ~11.
+- **Phase 5 (sign-in and users):** first-run admin setup, sign-in/out,
+  admin Users page, change password; every API route needs a sign-in;
+  migration `add_users`.
 
 ### Earlier
 - Test case management: library, details, create/edit, execution status,
@@ -255,8 +281,8 @@ the filtered list.
 
 | Suite | Files | Tests |
 |---|---:|---:|
-| Server (`apps/server/tests`) | 11 | 172 |
-| Web (`apps/web/src/**/*.test.*`) | 13 | 94 |
+| Server (`apps/server/tests`) | 12 | 192 |
+| Web (`apps/web/src/**/*.test.*`) | 14 | 104 |
 
 Server tests run against a separate SQLite database (`test.db`) that is rebuilt
 on every run; n8n is mocked. Web tests mock the API with `mockApi` from
@@ -272,7 +298,9 @@ on every run; n8n is mocked. Web tests mock the API with `mockApi` from
   optional field). Exact repeats are removed; review every batch before adding
   it, and use *Refine with AI* to fix it.
 - **Per-step results** can't be edited in the test case form yet.
-- **Not built yet:** login and accounts (plan Phase 5), and recent activity on
+- **Sign-in:** no "forgot password" email (an admin resets it) and no
+  per-project permissions (everyone signed in sees every project).
+- **Not built yet:** recent activity on
   the Overview.
 - **Low-memory machines:** with Ollama loaded, the web test suite can run out of
   memory on 8 GB; run it with `npx vitest run --maxWorkers=2` in `apps/web`.
@@ -284,6 +312,13 @@ on every run; n8n is mocked. Web tests mock the API with `mockApi` from
 ## 10. Security
 
 - The server only listens on `127.0.0.1` and refuses to start otherwise.
+- **Sign-in:** passwords are hashed with scrypt (Node's built-in crypto). A
+  session is a random token in an `HttpOnly`, `SameSite=Strict` cookie
+  (`Secure` when `NODE_ENV=production`); only its SHA-256 hash is stored.
+  Sessions last 14 days. After 10 failed sign-ins for an email, sign-in for it
+  is refused for 15 minutes.
+- Requests that change data and carry an `Origin` header must come from an
+  origin in `CORS_ORIGIN`, so other websites can't act with your session.
 - n8n listens on all network interfaces by default. To keep it local, set
   `N8N_LISTEN_ADDRESS=127.0.0.1` in n8n's environment.
 - Secrets live only in `apps/server/.env` (git-ignored) and in the n8n

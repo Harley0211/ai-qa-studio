@@ -11,10 +11,25 @@ export const json = (body, status = 200) =>
 export const apiError = (status, code, message, fields) =>
   json({ error: { code, message, ...(fields ? { details: { fields } } : {}) } }, status);
 
+export const signedInUser = (overrides = {}) => ({
+  id: 'u1',
+  name: 'Ada Admin',
+  email: 'ada@example.com',
+  role: 'ADMIN',
+  createdAt: '2026-01-01T00:00:00.000Z',
+  ...overrides,
+});
+
 // handlers: { 'METHOD /api/path': body | Response | (call) => body | Response }
+// By default the app is signed in as an admin; override 'GET /api/auth/status'
+// to test the sign-in screens.
 export function mockApi(handlers = {}) {
   const calls = [];
-  const all = { 'GET /api/health': { status: 'ok', checks: { database: 'ok' } }, ...handlers };
+  const all = {
+    'GET /api/health': { status: 'ok', checks: { database: 'ok' } },
+    'GET /api/auth/status': { setupRequired: false, user: signedInUser() },
+    ...handlers,
+  };
   const fn = vi.fn(async (input, init = {}) => {
     const method = (init.method ?? 'GET').toUpperCase();
     const body = init.body instanceof FormData ? init.body : init.body ? JSON.parse(init.body) : undefined;

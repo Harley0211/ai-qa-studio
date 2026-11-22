@@ -1,6 +1,8 @@
-import { ChevronDown, FileText, FlaskConical, FolderKanban, Image, Menu, Sparkles, X } from 'lucide-react';
+import { ChevronDown, FileText, FlaskConical, FolderKanban, Image, Menu, Sparkles, Users, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, matchPath, useLocation } from 'react-router-dom';
+import { AccountMenu } from '../../features/auth/AccountMenu.jsx';
+import { useCurrentUser } from '../../features/auth/auth.hooks.js';
 import { IMAGE_TOOL_PATH, PRD_TOOL_PATH, imageToolHref, prdToolHref } from '../../features/tools/paths.js';
 import { useTheme } from '../../lib/theme.js';
 import { IconButton } from '../ui/Button.jsx';
@@ -64,6 +66,7 @@ export function AppLayout() {
   const [open, setOpen] = useState(false);
   const { pathname } = useLocation();
   const { theme, toggleTheme } = useTheme();
+  const user = useCurrentUser();
   useEffect(() => setOpen(false), [pathname]);
 
   return (
@@ -94,8 +97,18 @@ export function AppLayout() {
             </NavLink>
           ))}
           <ToolsNav pathname={pathname} />
+          {user?.role === 'ADMIN' && (
+            <div className="pt-3">
+              <p className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-slate-400">Admin</p>
+              <NavLink to="/users" className={navLinkClass}>
+                <Users className="h-4 w-4" aria-hidden="true" />
+                Users
+              </NavLink>
+            </div>
+          )}
         </nav>
-        <div className="space-y-1 border-t border-slate-200 px-4 py-3">
+        <div className="space-y-3 border-t border-slate-200 px-4 py-3">
+          <AccountMenu />
           <div className="flex items-center justify-between gap-2">
             <BackendStatus />
             {/* The mobile header has its own toggle. */}
@@ -103,7 +116,6 @@ export function AppLayout() {
               <ThemeToggle theme={theme} onToggle={toggleTheme} />
             </div>
           </div>
-          <p className="text-xs text-slate-400">Local mode · single user</p>
         </div>
       </aside>
 

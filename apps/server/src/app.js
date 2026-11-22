@@ -3,6 +3,15 @@ import express from "express";
 import helmet from "helmet";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { hostGuard } from "./middleware/hostGuard.js";
+import {
+  loadSession,
+  originGuard,
+  requireAdmin,
+  requireAuth,
+} from "./modules/auth/auth.middleware.js";
+import { authRouter } from "./modules/auth/auth.routes.js";
+import { createSessionStore } from "./modules/auth/auth.sessions.js";
+import { usersRouter } from "./modules/auth/users.routes.js";
 import { healthRouter } from "./modules/health/health.routes.js";
 import { projectsRouter } from "./modules/projects/projects.routes.js";
 import { DEFAULT_STORAGE_ROOT } from "./modules/evidence/evidence.storage.js";
@@ -35,9 +44,26 @@ export function createApp({
 
   app.use(express.json({ limit: "100kb" }));
 
+  const sessions = createSessionStore({
+    prisma,
+    secureCookies: env.NODE_ENV === "production",
+  });
+  app.use(originGuard(env.corsOrigins));
+  app.use(loadSession(sessions));
+
   app.use("/api/health", healthRouter({ prisma }));
+  app.use("/api/auth", authRouter({ prisma, sessions }));
+  app.use("/api/users", requireAdmin, usersRouter({ prisma, sessions }));
   app.use(
     "/api/projects",
+    // n8n's callbacks and its signed screenshot downloads carry their own
+    // one-time tokens instead of a sign-in.
+    requireAuth({
+      publicPaths: [
+        /^\/[^/]+\/generations\/[^/]+\/(callback|failure)$/,
+        /^\/[^/]+\/evidence\/[^/]+\/signed-file$/,
+      ],
+    }),
     projectsRouter({
       prisma,
       storageRoot,
