@@ -7,6 +7,8 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog.jsx';
 import { EmptyState, ErrorState, LoadingState } from '../../components/ui/States.jsx';
 import { useToast } from '../../components/ui/Toast.jsx';
 import { useDebouncedValue } from '../../lib/useDebouncedValue.js';
+import { useCurrentUser } from '../auth/auth.hooks.js';
+import { projectHref } from '../tools/paths.js';
 import { useDeleteProject, useProjects } from './hooks.js';
 import { ProjectCard } from './ProjectCard.jsx';
 import { ProjectFormModal } from './ProjectFormModal.jsx';
@@ -20,6 +22,8 @@ function Stat({ label, value }) {
   );
 }
 
+// The start page after signing in: choose the project to work on. Tools only
+// open inside a project, and only admins create, edit or delete projects.
 export default function ProjectsPage() {
   const [search, setSearch] = useState('');
   const q = useDebouncedValue(search.trim(), 300);
@@ -30,6 +34,7 @@ export default function ProjectsPage() {
   const deleteProject = useDeleteProject();
   const toast = useToast();
   const navigate = useNavigate();
+  const isAdmin = useCurrentUser()?.role === 'ADMIN';
 
   const openCreate = () => { setEditing(null); setFormOpen(true); };
   const closeForm = () => { setFormOpen(false); setEditing(null); };
@@ -52,12 +57,18 @@ export default function ProjectsPage() {
   } else if (data.items.length === 0) {
     content = q ? (
       <EmptyState icon={Search} title="No matching projects" description={`Nothing matches “${q}”. Try a different search.`} />
+    ) : isAdmin ? (
+      <EmptyState
+        icon={FolderKanban}
+        title="No projects yet"
+        description="Create a project to start organising application URLs, evidence, test cases and bug reports."
+        action={<Button icon={Plus} onClick={openCreate}>Create your first project</Button>}
+      />
     ) : (
       <EmptyState
         icon={FolderKanban}
         title="No projects yet"
-        description="Create a project to start organising application URLs, evidence and test cases."
-        action={<Button icon={Plus} onClick={openCreate}>Create your first project</Button>}
+        description="Ask an admin to create a project for your team."
       />
     );
   } else {
@@ -75,8 +86,8 @@ export default function ProjectsPage() {
             <ProjectCard
               key={p.id}
               project={p}
-              onEdit={(project) => { setEditing(project); setFormOpen(true); }}
-              onDelete={(project) => { deleteProject.reset(); setDeleting(project); }}
+              onEdit={isAdmin ? (project) => { setEditing(project); setFormOpen(true); } : undefined}
+              onDelete={isAdmin ? (project) => { deleteProject.reset(); setDeleting(project); } : undefined}
             />
           ))}
         </ul>
@@ -87,9 +98,9 @@ export default function ProjectsPage() {
   return (
     <>
       <PageHeader
-        title="Projects"
-        description="Each project keeps its own URLs, evidence and test cases."
-        actions={<Button icon={Plus} onClick={openCreate}>New project</Button>}
+        title="Choose a project"
+        description="Pick the project you're working on. The tools (test case generation, bug reports, HAR reader) open inside it and only show that project's data."
+        actions={isAdmin && <Button icon={Plus} onClick={openCreate}>New project</Button>}
       />
 
       <div className="relative mb-6 max-w-md">
@@ -114,7 +125,7 @@ export default function ProjectsPage() {
             const wasEdit = Boolean(editing);
             closeForm();
             toast.success(wasEdit ? 'Project updated' : 'Project created');
-            if (!wasEdit) navigate(`/projects/${saved.id}`);
+            if (!wasEdit) navigate(projectHref(saved.id));
           }}
         />
       )}
@@ -122,7 +133,7 @@ export default function ProjectsPage() {
       {deleting && (
         <ConfirmDialog
           title="Delete project?"
-          message={`“${deleting.name}” and everything inside it will be permanently deleted. This cannot be undone.`}
+          message={`“${deleting.name}” and everything inside it (test cases, evidence, documents, bug reports and HAR files) will be permanently deleted. This cannot be undone.`}
           confirmLabel="Delete project"
           isPending={deleteProject.isPending}
           error={deleteProject.error?.message}

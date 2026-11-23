@@ -1,5 +1,7 @@
 import { FlaskConical } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { PROJECTS_PATH } from "../tools/paths.js";
 import { Button } from "../../components/ui/Button.jsx";
 import { ErrorState, LoadingState } from "../../components/ui/States.jsx";
 import { TextField } from "../../components/ui/TextField.jsx";
@@ -41,13 +43,18 @@ function FormAlert({ message }) {
 
 export function LoginPage() {
   const login = useLogin();
+  const navigate = useNavigate();
   const [values, setValues] = useState({ email: "", password: "" });
   const { fields, message } = formErrors(login.error);
   const set = (field) => (event) => setValues((v) => ({ ...v, [field]: event.target.value }));
 
   function handleSubmit(event) {
     event.preventDefault();
-    login.mutate({ email: values.email.trim(), password: values.password });
+    // After signing in, everyone starts by choosing a project.
+    login.mutate(
+      { email: values.email.trim(), password: values.password },
+      { onSuccess: () => navigate(PROJECTS_PATH, { replace: true }) },
+    );
   }
 
   return (
@@ -85,6 +92,7 @@ export function LoginPage() {
 
 export function SetupPage() {
   const setup = useSetup();
+  const navigate = useNavigate();
   const [values, setValues] = useState({ name: "", email: "", password: "", confirm: "" });
   const [mismatch, setMismatch] = useState(false);
   const { fields, message } = formErrors(setup.error);
@@ -95,7 +103,10 @@ export function SetupPage() {
     const different = values.password !== values.confirm;
     setMismatch(different);
     if (different) return;
-    setup.mutate({ name: values.name.trim(), email: values.email.trim(), password: values.password });
+    setup.mutate(
+      { name: values.name.trim(), email: values.email.trim(), password: values.password },
+      { onSuccess: () => navigate(PROJECTS_PATH, { replace: true }) },
+    );
   }
 
   return (
@@ -140,7 +151,7 @@ export function SetupPage() {
 }
 
 // Shows the app only to a signed-in user; otherwise the first-run setup or
-// the sign-in screen. The page you were on opens again after signing in.
+// the sign-in screen. After signing in, the project picker opens.
 export function AuthGate({ children }) {
   useSignOutOnExpiredSession();
   const status = useAuthStatus();

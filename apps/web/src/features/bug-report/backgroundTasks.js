@@ -4,6 +4,7 @@ import { harReportMarkdown } from "../har/harExplainer.js";
 import { harFactsForAi, redactHar, redactUrl } from "../har/harParser.js";
 import { MAX_AI_IMAGES, frameName, framePlan } from "./attachments.js";
 import { extractFrames, formatTimestamp } from "./videoFrames.js";
+import { bugReportsUrl } from "./hooks.js";
 
 // Work that keeps going while the person moves around the app: preparing and
 // uploading a bug report, then waiting for the AI. It lives outside React, so
@@ -71,17 +72,21 @@ function harErrorsOf(hars) {
   ).slice(0, 100);
 }
 
-async function uploadFile(reportId, kind, blob, name) {
+async function uploadFile(projectId, reportId, kind, blob, name) {
   const form = new FormData();
   form.append("kind", kind);
   form.append("file", blob, name);
-  return api.upload(`/bug-reports/${encodeURIComponent(reportId)}/files`, form);
+  return api.upload(`${bugReportsUrl(projectId)}/${encodeURIComponent(reportId)}/files`, form);
 }
 
+// project: { id, name } (the report is saved in that project)
 // form: { description, steps, expected }, environment, attachments: [{ file, kind, har? }]
-export function startBugReportTask({ form, environment, attachments, onReportCreated, maxFileBytes }) {
+export function startBugReportTask({ project, form, environment, attachments, onReportCreated, maxFileBytes }) {
+  const projectId = project.id;
   const task = {
     id: nextTaskId++,
+    projectId,
+    projectName: project.name,
     label: form.description.trim().slice(0, 80),
     phase: "preparing",
     message: "Preparing…",
@@ -146,7 +151,7 @@ export function startBugReportTask({ form, environment, attachments, onReportCre
     );
     images.slice(0, MAX_AI_IMAGES).forEach(({ blob, name }) => body.append("images", blob, name));
 
-    const created = await api.upload("/bug-reports", body);
+    const created = await api.upload(bugReportsUrl(projectId), body);
     const reportId = created.data.id;
     update(task.id, { reportId });
     onReportCreated?.(reportId);
@@ -170,7 +175,7 @@ export function startBugReportTask({ form, environment, attachments, onReportCre
         continue;
       }
       try {
-        await uploadFile(reportId, kind, blob, name);
+        await uploadFile(projectId, reportId, kind, blob, name);
       } catch (error) {
         warn(`${name} couldn't be saved: ${error.message}`);
       }
@@ -180,7 +185,7 @@ export function startBugReportTask({ form, environment, attachments, onReportCre
     for (;;) {
       let report;
       try {
-        report = (await api.get(`/bug-reports/${encodeURIComponent(reportId)}`)).data;
+        report = (await api.get(`${bugReportsUrl(projectId)}/${encodeURIComponent(reportId)}`)).data;
       } catch (error) {
         if (error.status === 404) {
           finish({ phase: "failed", message: "The bug report was deleted." });

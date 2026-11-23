@@ -31,12 +31,12 @@ describe("Project overview", () => {
     expect(within(section).getByText("3 images uploaded")).toBeInTheDocument();
     expect(
       within(section).getByRole("link", { name: /^Open tool\s?: image evidence$/ }),
-    ).toHaveAttribute("href", "/tools/image-to-test-cases?project=p1");
+    ).toHaveAttribute("href", "/projects/p1/tools/image-to-test-cases");
 
     expect(within(section).getByText("1 document added")).toBeInTheDocument();
     expect(
       within(section).getByRole("link", { name: /^Open tool\s?: PRD \/ document$/ }),
-    ).toHaveAttribute("href", "/tools/prd-to-test-cases?project=p1");
+    ).toHaveAttribute("href", "/projects/p1/tools/prd-to-test-cases");
   });
 
   it("shows an execution summary of the project's test cases", async () => {

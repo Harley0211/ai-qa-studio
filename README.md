@@ -5,7 +5,7 @@ requirements documents (PRDs) into test cases with a local AI model, lets you
 review and refine them before they are saved, and then manage, run and export
 them per project. Team members sign in; everyone works on all projects.
 
-**Status (23 Nov 2026):** 396 automated tests pass (229 server, 167 web) and the
+**Status (23 Nov 2026):** 411 automated tests pass (234 server, 177 web) and the
 production build succeeds.
 
 ---
@@ -206,8 +206,10 @@ refuses uploads over 100 MB.
   rename them, change their role, reset a password (signs them out
   everywhere) or remove them. The app always keeps at least one admin, and you
   can't remove yourself.
-- **Everyone:** sees and works on all projects (shared team), can change their
-  own password (signs out their other browsers) and sign out from the sidebar.
+- **Everyone:** can open and work in any project (one project at a time),
+  change their own password (signs out their other browsers) and sign out
+  from the sidebar.
+- **Admins** also create, rename and delete projects.
 - Forgotten password: an admin resets it on the Users page.
 
 ### Other
@@ -605,19 +607,21 @@ screenshot downloads, which use their own one-time tokens. All routes are under
 | `GET /generations/:runId/refinements` | AI chat history of a batch, with each reply |
 | `POST /generations/:runId/callback`, `POST /generations/:runId/failure` | Used by n8n (one-time Bearer token) |
 
-Bug reports and the HAR library (signed in; shared with the team; changing or
-deleting needs the creator or an admin):
+Bug reports and the HAR library belong to a project and live under
+`/api/projects/:projectId` (the paths below are relative to it; a report or
+HAR from another project answers 404). Changing or deleting needs the creator
+or an admin. `POST`/`PATCH`/`DELETE /api/projects[/:id]` are admin-only.
 
 | Method and path | Purpose |
 |---|---|
-| `POST /api/bug-reports` | Start one. Multipart: `details` (JSON: description, steps, expected, environment, `harFacts`, `imageNotes`, `imageKinds`, `attachments`, `harErrors`) and up to 12 `images` for the AI. Returns `202 { id }` |
-| `GET /api/bug-reports`, `GET /api/bug-reports/:id` | List (newest first), one report with its `report`, `texts` and `files` |
-| `POST /api/bug-reports/:id/files` | Add a file to its folder (`kind`: image, video, har, har-summary; `file`) |
-| `GET /api/bug-reports/:id/files/:fileId` | Download a file (`?download=1` as an attachment) |
-| `PATCH /api/bug-reports/:id` | Save `title`, `severity`, edited `texts` |
-| `POST /api/bug-reports/:id/retry` | Run the AI again after a failure |
-| `DELETE /api/bug-reports/:id` | Delete the report and its folder |
-| `GET`/`POST /api/har-files`, `GET`/`DELETE /api/har-files/:id`, `GET /api/har-files/:id/file` | HAR library: list, save (`file` + `summary`), read, delete with its folder, download |
+| `POST /bug-reports` | Start one. Multipart: `details` (JSON: description, steps, expected, environment, `harFacts`, `imageNotes`, `imageKinds`, `attachments`, `harErrors`) and up to 12 `images` for the AI. Returns `202 { id }` |
+| `GET /bug-reports`, `GET /bug-reports/:id` | List (newest first), one report with its `report`, `texts` and `files` |
+| `POST /bug-reports/:id/files` | Add a file to its folder (`kind`: image, video, har, har-summary; `file`) |
+| `GET /bug-reports/:id/files/:fileId` | Download a file (`?download=1` as an attachment) |
+| `PATCH /bug-reports/:id` | Save `title`, `severity`, edited `texts` |
+| `POST /bug-reports/:id/retry` | Run the AI again after a failure |
+| `DELETE /bug-reports/:id` | Delete the report and its folder |
+| `GET`/`POST /har-files`, `GET`/`DELETE /har-files/:id`, `GET /har-files/:id/file` | HAR library: list, save (`file` + `summary`), read, delete with its folder, download |
 
 The server calls Ollama directly for bug reports (`OLLAMA_URL`, default
 `http://127.0.0.1:11434`; `OLLAMA_MODEL`, default `qwen3-vl:2b-instruct`).
@@ -681,8 +685,8 @@ the filtered list.
 
 | Suite | Files | Tests |
 |---|---:|---:|
-| Server (`apps/server/tests`) | 16 | 229 |
-| Web (`apps/web/src/**/*.test.*`) | 18 | 167 |
+| Server (`apps/server/tests`) | 16 | 234 |
+| Web (`apps/web/src/**/*.test.*`) | 18 | 177 |
 
 Server tests run against a separate SQLite database (`test.db`) that is rebuilt
 on every run; n8n is mocked. Web tests mock the API with `mockApi` from

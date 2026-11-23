@@ -31,9 +31,10 @@ afterAll(async () => {
 });
 
 const PASSWORD = "correct horse 1";
+// An admin, so the tests can also create projects through the tunnel.
 async function createUser(email = "tester@example.com") {
   return prisma.user.create({
-    data: { email, name: "Tess", role: "MEMBER", passwordHash: await hashPassword(PASSWORD) },
+    data: { email, name: "Tess", role: "ADMIN", passwordHash: await hashPassword(PASSWORD) },
   });
 }
 

@@ -12,6 +12,10 @@ import { generationRouter } from "../generation/generation.routes.js";
 import { createGenerationService } from "../generation/generation.service.js";
 import { documentsRouter } from "../documents/documents.routes.js";
 import { testCasesRouter } from "../test-cases/test-cases.routes.js";
+import { requireAdmin } from "../auth/auth.middleware.js";
+import { bugReportsRouter } from "../bug-reports/bugReports.routes.js";
+import { harFilesRouter } from "../har-files/harFiles.routes.js";
+import { notFound } from "../../lib/errors.js";
 
 export function projectsRouter({
   prisma,
@@ -21,8 +25,18 @@ export function projectsRouter({
   publicBackendUrl,
   evidenceSigningSecret,
   evidenceUrlTtlSeconds,
+  bugReports,
+  fileStore,
+  maxFileBytes,
 }) {
   const router = Router();
+
+  // Tools that live inside a project need the project to exist.
+  const requireProject = asyncHandler(async (req, _res, next) => {
+    const project = await prisma.project.findUnique({ where: { id: req.params.projectId }, select: { id: true } });
+    if (!project) throw notFound("Project");
+    next();
+  });
   const service = createProjectsService(prisma, storageRoot);
   router.get(
     "/",
@@ -32,8 +46,10 @@ export function projectsRouter({
     }),
   );
 
+  // Only admins create, rename and delete projects; everyone can open them.
   router.post(
     "/",
+    requireAdmin,
     asyncHandler(async (req, res) => {
       const input = createProjectSchema.parse(req.body ?? {});
       res.status(201).json(await service.create(input));
@@ -49,6 +65,7 @@ export function projectsRouter({
 
   router.patch(
     "/:projectId",
+    requireAdmin,
     asyncHandler(async (req, res) => {
       const input = updateProjectSchema.parse(req.body ?? {});
       res.json(await service.update(req.params.projectId, input));
@@ -57,8 +74,17 @@ export function projectsRouter({
 
   router.delete(
     "/:projectId",
+    requireAdmin,
     asyncHandler(async (req, res) => {
+      // The project's bug report and HAR folders go with it.
+      const folders = [
+        ...(await bugReports.foldersOfProject(req.params.projectId)),
+        ...(await prisma.harFile.findMany({ where: { projectId: req.params.projectId }, select: { id: true } })).map(
+          ({ id }) => `har-files/${id}`,
+        ),
+      ];
       await service.remove(req.params.projectId);
+      await Promise.all(folders.map((folder) => fileStore.removeFolder(folder).catch(() => {})));
       res.status(204).end();
     }),
   );
@@ -100,6 +126,13 @@ export function projectsRouter({
   );
 
   router.use("/:projectId/test-cases", testCasesRouter({ prisma }));
+
+  router.use(
+    "/:projectId/bug-reports",
+    requireProject,
+    bugReportsRouter({ service: bugReports, maxUploadBytes, maxFileBytes }),
+  );
+  router.use("/:projectId/har-files", requireProject, harFilesRouter({ prisma, store: fileStore, maxFileBytes }));
 
   return router;
 }

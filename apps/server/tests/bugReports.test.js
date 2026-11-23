@@ -57,7 +57,7 @@ const details = {
 };
 
 function submit(body = details, images = [png, jpeg], agent = api()) {
-  let req = agent.post("/api/bug-reports").field("details", JSON.stringify(body));
+  let req = agent.post(base).field("details", JSON.stringify(body));
   images.forEach((image, i) => {
     req = req.attach("images", image, { filename: i === 0 ? "cart.png" : "checkout-frame-1.jpg", contentType: "image/png" });
   });
@@ -66,7 +66,7 @@ function submit(body = details, images = [png, jpeg], agent = api()) {
 
 async function waitFor(id) {
   for (let i = 0; i < 100; i += 1) {
-    const res = await api().get(`/api/bug-reports/${id}`);
+    const res = await api().get(`${base}/${id}`);
     if (res.body.data.status !== "PENDING") return res;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
@@ -75,8 +75,12 @@ async function waitFor(id) {
 
 const folder = (id) => path.join(filesRoot, "bug-reports", id);
 
+let base;
+let project;
 beforeEach(async () => {
   await resetDb();
+  project = (await api().post("/api/projects").send({ name: "PNCC" })).body;
+  base = `/api/projects/${project.id}/bug-reports`;
   ollama.chat.mockReset();
   ollama.chat.mockResolvedValue(JSON.stringify(modelAnswer));
 });
@@ -92,7 +96,7 @@ describe("Generating a bug report", () => {
     const { id } = res.body.data;
 
     // Listed straight away, while the AI is still working.
-    const list = await api().get("/api/bug-reports");
+    const list = await api().get(base);
     expect(list.body.items[0]).toMatchObject({ id, fileCount: 2, createdBy: { name: TEST_ADMIN.name } });
 
     const done = await waitFor(id);
@@ -130,13 +134,13 @@ describe("Generating a bug report", () => {
     const failed = await waitFor(id);
     expect(failed.body.data).toMatchObject({ status: "FAILED", error: expect.stringMatching(/Cannot reach/) });
 
-    const retry = await api().post(`/api/bug-reports/${id}/retry`);
+    const retry = await api().post(`${base}/${id}/retry`);
     expect(retry.status).toBe(202);
     const done = await waitFor(id);
     expect(done.body.data.status).toBe("SUCCEEDED");
     expect(ollama.chat.mock.calls[1][0].images).toEqual([png.toString("base64"), jpeg.toString("base64")]);
 
-    expect((await api().post(`/api/bug-reports/${id}/retry`)).status).toBe(409);
+    expect((await api().post(`${base}/${id}/retry`)).status).toBe(409);
   });
 
   it("says when the model's answer is unreadable", async () => {
@@ -151,15 +155,15 @@ describe("Generating a bug report", () => {
     expect(res.body.error.code).toBe("VALIDATION_ERROR");
 
     res = await api()
-      .post("/api/bug-reports")
+      .post(base)
       .field("details", JSON.stringify(details))
       .attach("images", Buffer.from("not an image"), { filename: "x.png", contentType: "image/png" });
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe("INVALID_FILE_TYPE");
 
-    expect((await api().post("/api/bug-reports").field("details", "{oops")).status).toBe(400);
+    expect((await api().post(base).field("details", "{oops")).status).toBe(400);
     expect(ollama.chat).not.toHaveBeenCalled();
-    expect((await api().get("/api/bug-reports")).body.total).toBe(0);
+    expect((await api().get(base)).body.total).toBe(0);
   });
 
   it("allows one generating report at a time per person", async () => {
@@ -177,9 +181,37 @@ describe("Generating a bug report", () => {
     expect((await submit()).status).toBe(202);
   });
 
+  it("keeps each project's bug reports to itself", async () => {
+    const { id } = (await submit()).body.data;
+    await waitFor(id);
+    const file = (await api().get(`${base}/${id}`)).body.data.files[0];
+    const fiber = (await api().post("/api/projects").send({ name: "Fiber" })).body;
+    const fiberBase = `/api/projects/${fiber.id}/bug-reports`;
+
+    // On Fiber, PNCC's report doesn't exist.
+    expect((await api().get(fiberBase)).body.items).toEqual([]);
+    expect((await api().get(`${fiberBase}/${id}`)).status).toBe(404);
+    expect((await api().get(`${fiberBase}/${id}/files/${file.id}`)).status).toBe(404);
+    expect((await api().patch(`${fiberBase}/${id}`).send({ severity: "Minor" })).status).toBe(404);
+    expect((await api().delete(`${fiberBase}/${id}`)).status).toBe(404);
+    expect((await api().get(base)).body.items.map((item) => item.id)).toEqual([id]);
+
+    expect((await api().get("/api/projects/nope/bug-reports")).status).toBe(404);
+  });
+
+  it("deletes a project's bug report folders with the project", async () => {
+    const { id } = (await submit()).body.data;
+    await waitFor(id);
+    expect(existsSync(folder(id))).toBe(true);
+
+    expect((await api().delete(`/api/projects/${project.id}`)).status).toBe(204);
+    expect(existsSync(folder(id))).toBe(false);
+    expect(await prisma.bugReport.count()).toBe(0);
+  });
+
   it("marks reports cut off by a server restart as interrupted", async () => {
     const user = await prisma.user.findFirst();
-    const row = await prisma.bugReport.create({ data: { input: "{}", createdById: user.id } });
+    const row = await prisma.bugReport.create({ data: { input: "{}", createdById: user.id, projectId: project.id } });
 
     const service = createBugReportService({ prisma, store: createFileStore(filesRoot), ollama });
     await service.recoverInterrupted();
@@ -202,39 +234,39 @@ describe("A bug report's folder", () => {
     const id = await finishedReport();
 
     const video = await api()
-      .post(`/api/bug-reports/${id}/files`)
+      .post(`${base}/${id}/files`)
       .field("kind", "video")
       .attach("file", Buffer.from("fake mp4"), { filename: "checkout.mp4", contentType: "video/mp4" });
     expect(video.status).toBe(201);
     expect(video.body.data).toMatchObject({ name: "checkout.mp4", kind: "video", mimeType: "video/mp4", usedByAi: false });
 
     const har = await api()
-      .post(`/api/bug-reports/${id}/files`)
+      .post(`${base}/${id}/files`)
       .field("kind", "har")
       .attach("file", Buffer.from('{"log":{"entries":[]}}'), { filename: "session-redacted.har", contentType: "text/html" });
     // The served type is decided by the server, not the browser.
     expect(har.body.data.mimeType).toBe("application/json");
 
-    const download = await api().get(`/api/bug-reports/${id}/files/${video.body.data.id}?download=1`);
+    const download = await api().get(`${base}/${id}/files/${video.body.data.id}?download=1`);
     expect(download.status).toBe(200);
     expect(download.headers["content-disposition"]).toMatch(/attachment; filename="checkout.mp4"/);
     expect(download.body.toString()).toBe("fake mp4");
 
-    const report = (await api().get(`/api/bug-reports/${id}`)).body.data;
+    const report = (await api().get(`${base}/${id}`)).body.data;
     expect(report.files).toHaveLength(4);
-    expect((await api().get("/api/bug-reports")).body.items[0].fileCount).toBe(4);
+    expect((await api().get(base)).body.items[0].fileCount).toBe(4);
   });
 
   it("rejects unknown kinds and fake images, leaving no temp files behind", async () => {
     const id = await finishedReport();
     let res = await api()
-      .post(`/api/bug-reports/${id}/files`)
+      .post(`${base}/${id}/files`)
       .field("kind", "script")
       .attach("file", Buffer.from("x"), { filename: "x.js" });
     expect(res.status).toBe(400);
 
     res = await api()
-      .post(`/api/bug-reports/${id}/files`)
+      .post(`${base}/${id}/files`)
       .field("kind", "image")
       .attach("file", Buffer.from("<svg/>"), { filename: "x.png", contentType: "image/svg+xml" });
     expect(res.status).toBe(400);
@@ -245,21 +277,21 @@ describe("A bug report's folder", () => {
     const id = await finishedReport();
     const texts = { jiraMarkdown: "## Summary\nEdited", jiraWiki: "h2. Summary", slack: "Hi team,\nEdited" };
 
-    const res = await api().patch(`/api/bug-reports/${id}`).send({ title: "[Checkout] New title", severity: "Minor", texts });
+    const res = await api().patch(`${base}/${id}`).send({ title: "[Checkout] New title", severity: "Minor", texts });
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ title: "[Checkout] New title", severity: "Minor", texts, report: { severity: "Minor" } });
 
-    expect((await api().patch(`/api/bug-reports/${id}`).send({ severity: "Urgent" })).status).toBe(400);
-    expect((await api().patch(`/api/bug-reports/${id}`).send({})).status).toBe(400);
+    expect((await api().patch(`${base}/${id}`).send({ severity: "Urgent" })).status).toBe(400);
+    expect((await api().patch(`${base}/${id}`).send({})).status).toBe(400);
   });
 
   it("deletes the report together with its folder", async () => {
     const id = await finishedReport();
     expect(existsSync(folder(id))).toBe(true);
 
-    expect((await api().delete(`/api/bug-reports/${id}`)).status).toBe(204);
+    expect((await api().delete(`${base}/${id}`)).status).toBe(204);
     expect(existsSync(folder(id))).toBe(false);
-    expect((await api().get(`/api/bug-reports/${id}`)).status).toBe(404);
+    expect((await api().get(`${base}/${id}`)).status).toBe(404);
     expect(await prisma.bugReportFile.count()).toBe(0);
   });
 
@@ -268,12 +300,12 @@ describe("A bug report's folder", () => {
     const member = await createSignedInUser({ email: "member@test.local", name: "Member" });
     const asMember = (method, url) => request(app)[method](url).set("Cookie", member.cookie);
 
-    expect((await asMember("get", `/api/bug-reports/${id}`)).status).toBe(200);
-    expect((await asMember("delete", `/api/bug-reports/${id}`)).status).toBe(403);
-    expect((await asMember("patch", `/api/bug-reports/${id}`).send({ severity: "Minor" })).status).toBe(403);
+    expect((await asMember("get", `${base}/${id}`)).status).toBe(200);
+    expect((await asMember("delete", `${base}/${id}`)).status).toBe(403);
+    expect((await asMember("patch", `${base}/${id}`).send({ severity: "Minor" })).status).toBe(403);
     expect(existsSync(folder(id))).toBe(true);
 
-    expect((await request(app).get("/api/bug-reports")).status).toBe(401);
+    expect((await request(app).get(base)).status).toBe(401);
   });
 });
 

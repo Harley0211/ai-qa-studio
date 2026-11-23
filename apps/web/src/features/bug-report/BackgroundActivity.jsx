@@ -45,7 +45,7 @@ export function BackgroundActivity() {
               )}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-semibold text-slate-900">
-                  Bug report · {task.title ?? task.label}
+                  Bug report · {task.projectName} · {task.title ?? task.label}
                 </p>
                 <p role="status" className="text-xs text-slate-600">
                   {task.message}
@@ -56,7 +56,7 @@ export function BackgroundActivity() {
                   </p>
                 ))}
                 {task.reportId && (
-                  <Link to={bugReportHref(task.reportId)} className="text-xs font-semibold text-indigo-600 hover:underline">
+                  <Link to={bugReportHref(task.projectId, task.reportId)} className="text-xs font-semibold text-indigo-600 hover:underline">
                     Open report
                   </Link>
                 )}

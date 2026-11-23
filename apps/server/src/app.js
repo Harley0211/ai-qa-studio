@@ -17,9 +17,7 @@ import { projectsRouter } from "./modules/projects/projects.routes.js";
 import { DEFAULT_STORAGE_ROOT } from "./modules/evidence/evidence.storage.js";
 import { createN8nClient } from "./modules/generation/generation.n8n.js";
 import { createOllamaClient } from "./modules/bug-reports/bugReports.ollama.js";
-import { bugReportsRouter } from "./modules/bug-reports/bugReports.routes.js";
 import { createBugReportService } from "./modules/bug-reports/bugReports.service.js";
-import { harFilesRouter } from "./modules/har-files/harFiles.routes.js";
 import { DEFAULT_FILES_ROOT, createFileStore } from "./lib/fileStore.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -81,7 +79,7 @@ export function createApp({
   );
 
   // Saved bug report texts can be larger than other requests.
-  app.use("/api/bug-reports", express.json({ limit: "1mb" }));
+  app.use(/^\/api\/projects\/[^/]+\/bug-reports(\/|$)/, express.json({ limit: "1mb" }));
   app.use(express.json({ limit: "100kb" }));
 
   const sessions = createSessionStore({
@@ -112,22 +110,10 @@ export function createApp({
       publicBackendUrl: env.PUBLIC_BACKEND_URL,
       evidenceSigningSecret: env.EVIDENCE_SIGNING_SECRET,
       evidenceUrlTtlSeconds: env.EVIDENCE_URL_TTL_SECONDS,
-    }),
-  );
-
-  app.use(
-    "/api/bug-reports",
-    requireAuth(),
-    bugReportsRouter({
-      service: bugReports,
-      maxUploadBytes: env.MAX_UPLOAD_MB * 1024 * 1024,
+      bugReports,
+      fileStore,
       maxFileBytes,
     }),
-  );
-  app.use(
-    "/api/har-files",
-    requireAuth(),
-    harFilesRouter({ prisma, store: fileStore, maxFileBytes }),
   );
 
   app.use("/api", notFoundHandler);

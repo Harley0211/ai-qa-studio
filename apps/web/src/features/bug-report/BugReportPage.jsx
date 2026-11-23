@@ -9,7 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useOutletContext } from "react-router-dom";
 import { PageHeader } from "../../components/layout/PageHeader.jsx";
 import { Button } from "../../components/ui/Button.jsx";
 import { EmptyState, ErrorState, LoadingState } from "../../components/ui/States.jsx";
@@ -18,6 +18,7 @@ import { useToast } from "../../components/ui/Toast.jsx";
 import { HarErrors } from "../har/HarViews.jsx";
 import { formatBytes, readHarFile } from "../har/harParser.js";
 import { bugReportHref } from "../tools/paths.js";
+import { ToolCrumb } from "../tools/ToolCrumb.jsx";
 import {
   MAX_AI_IMAGES,
   MAX_SAVED_FILE_BYTES,
@@ -151,9 +152,11 @@ function AttachmentsStep({ attachments, onAdd, onRemove, plan }) {
   );
 }
 
-// Reports being prepared, uploaded or written right now (this browser).
-function InProgress() {
-  const tasks = useBackgroundTasks().filter((task) => task.phase !== "done" && task.phase !== "failed");
+// Reports for this project being prepared, uploaded or written right now.
+function InProgress({ projectId }) {
+  const tasks = useBackgroundTasks().filter(
+    (task) => task.projectId === projectId && task.phase !== "done" && task.phase !== "failed",
+  );
   if (tasks.length === 0) return null;
 
   return (
@@ -166,7 +169,7 @@ function InProgress() {
             <p className="text-xs text-slate-500">{task.message} You can leave this page; it keeps going.</p>
           </div>
           {task.reportId && (
-            <Link to={bugReportHref(task.reportId)} className="text-sm font-medium text-indigo-600 hover:underline">
+            <Link to={bugReportHref(projectId, task.reportId)} className="text-sm font-medium text-indigo-600 hover:underline">
               Open
             </Link>
           )}
@@ -176,9 +179,9 @@ function InProgress() {
   );
 }
 
-// Every saved report, each a folder of files.
-export function SavedReports() {
-  const { data, isPending, isError, error, refetch } = useBugReports();
+// Every saved report in this project, each a folder of files.
+export function SavedReports({ projectId }) {
+  const { data, isPending, isError, error, refetch } = useBugReports(projectId);
   const items = data?.items ?? [];
 
   return (
@@ -199,7 +202,7 @@ export function SavedReports() {
           {items.map((item) => (
             <li key={item.id}>
               <Link
-                to={bugReportHref(item.id)}
+                to={bugReportHref(projectId, item.id)}
                 className="flex h-full gap-3 rounded-xl border border-slate-200 bg-white p-4 transition-colors hover:border-indigo-300"
               >
                 <Folder className="mt-0.5 h-5 w-5 shrink-0 text-indigo-500" aria-hidden="true" />
@@ -227,6 +230,7 @@ export function SavedReports() {
 }
 
 export default function BugReportPage() {
+  const { project } = useOutletContext();
   const toast = useToast();
   const location = useLocation();
   const detected = useMemo(() => detectBrowser(), []);
@@ -294,7 +298,7 @@ export default function BugReportPage() {
       return;
     }
     setErrors({});
-    startBugReportTask({ form, environment, attachments, maxFileBytes: MAX_SAVED_FILE_BYTES });
+    startBugReportTask({ project, form, environment, attachments, maxFileBytes: MAX_SAVED_FILE_BYTES });
     toast.success("Generating in the background. You can keep working; you'll be told when it's ready.");
     // The task keeps the files; the form is ready for the next report.
     setForm(emptyForm);
@@ -304,10 +308,10 @@ export default function BugReportPage() {
 
   return (
     <>
-      <p className="mb-2 text-sm text-slate-500">Tools / Bug report</p>
+      <ToolCrumb project={project} tool="Bug report" />
       <PageHeader
         title="Bug report generator"
-        description="Describe the bug, attach screenshots, recordings or a HAR file, and get a Jira ticket and a Slack message ready to paste."
+        description={`Describe a bug in ${project.name}, attach screenshots, recordings or a HAR file, and get a Jira ticket and a Slack message ready to paste.`}
       />
 
       <div className="space-y-6">
@@ -360,8 +364,8 @@ export default function BugReportPage() {
           </div>
         </div>
 
-        <InProgress />
-        <SavedReports />
+        <InProgress projectId={project.id} />
+        <SavedReports projectId={project.id} />
       </div>
     </>
   );

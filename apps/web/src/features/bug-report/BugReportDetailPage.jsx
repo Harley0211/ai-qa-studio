@@ -1,6 +1,6 @@
 import { ArrowLeft, Check, Copy, Download, FolderOpen, Loader2, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { PageHeader } from "../../components/layout/PageHeader.jsx";
 import { Button } from "../../components/ui/Button.jsx";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog.jsx";
@@ -9,7 +9,7 @@ import { useToast } from "../../components/ui/Toast.jsx";
 import { downloadBlob } from "../../lib/zip.js";
 import { useCurrentUser } from "../auth/auth.hooks.js";
 import { formatBytes } from "../har/harParser.js";
-import { BUG_REPORT_PATH } from "../tools/paths.js";
+import { bugReportsHref } from "../tools/paths.js";
 import { buildBugReportZip } from "./attachments.js";
 import { PRIORITY_FOR_SEVERITY, jiraMarkdown, jiraWiki, slackMessage, slugify } from "./formatters.js";
 import {
@@ -62,9 +62,9 @@ function CopyButton({ text, label }) {
   );
 }
 
-function ReportEditor({ data, canChange }) {
+function ReportEditor({ projectId, data, canChange }) {
   const toast = useToast();
-  const update = useUpdateBugReport(data.id);
+  const update = useUpdateBugReport(projectId, data.id);
   const context = useMemo(() => contextOf(data.input), [data.input]);
   const [draft, setDraft] = useState(() => ({
     report: data.report,
@@ -212,12 +212,12 @@ function ReportEditor({ data, canChange }) {
         </div>
       )}
 
-      <ZipButton data={data} draft={draft} />
+      <ZipButton projectId={projectId} data={data} draft={draft} />
     </section>
   );
 }
 
-function ZipButton({ data, draft }) {
+function ZipButton({ projectId, data, draft }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
 
@@ -225,7 +225,7 @@ function ZipButton({ data, draft }) {
     setBusy(true);
     try {
       const files = await Promise.all(
-        data.files.map(async (file) => ({ ...file, blob: await fetchBlob(bugReportFileUrl(data.id, file.id, true)) })),
+        data.files.map(async (file) => ({ ...file, blob: await fetchBlob(bugReportFileUrl(projectId, data.id, file.id, true)) })),
       );
       const blob = await buildBugReportZip({ report: draft.report, texts: draft.texts, files });
       downloadBlob(blob, `bug-report-${slugify(draft.report.title)}-${String(data.createdAt).slice(0, 10)}.zip`);
@@ -245,7 +245,7 @@ function ZipButton({ data, draft }) {
   );
 }
 
-function FolderFiles({ data }) {
+function FolderFiles({ projectId, data }) {
   return (
     <section aria-label="Files in this folder" className="rounded-xl border border-slate-200 bg-white">
       <h2 className="flex items-center gap-2 border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900">
@@ -259,7 +259,7 @@ function FolderFiles({ data }) {
           {data.files.map((file) => (
             <li key={file.id} className="flex items-center gap-3 px-4 py-2.5">
               {file.mimeType.startsWith("image/") ? (
-                <img src={bugReportFileUrl(data.id, file.id)} alt="" loading="lazy" className="h-10 w-14 rounded object-cover" />
+                <img src={bugReportFileUrl(projectId, data.id, file.id)} alt="" loading="lazy" className="h-10 w-14 rounded object-cover" />
               ) : (
                 <span className="flex h-10 w-14 items-center justify-center rounded bg-slate-100 text-xs text-slate-500">
                   {file.kind === "video" ? "Video" : "File"}
@@ -273,7 +273,7 @@ function FolderFiles({ data }) {
                 </p>
               </div>
               <a
-                href={bugReportFileUrl(data.id, file.id, true)}
+                href={bugReportFileUrl(projectId, data.id, file.id, true)}
                 download={file.name}
                 className="text-sm font-medium text-indigo-600 hover:underline"
               >
@@ -322,12 +322,14 @@ function TesterInput({ input }) {
 
 export default function BugReportDetailPage() {
   const { reportId } = useParams();
+  const { project } = useOutletContext();
+  const listHref = bugReportsHref(project.id);
   const navigate = useNavigate();
   const toast = useToast();
   const user = useCurrentUser();
-  const { data, isPending, isError, error, refetch } = useBugReport(reportId);
-  const retry = useRetryBugReport(reportId);
-  const remove = useDeleteBugReport();
+  const { data, isPending, isError, error, refetch } = useBugReport(project.id, reportId);
+  const retry = useRetryBugReport(project.id, reportId);
+  const remove = useDeleteBugReport(project.id);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const report = data?.data;
   const canChange = Boolean(report && user && (user.role === "ADMIN" || report.createdBy?.id === user.id));
@@ -344,7 +346,7 @@ export default function BugReportDetailPage() {
     try {
       await remove.mutateAsync(reportId);
       toast.success("Bug report and its folder deleted.");
-      navigate(BUG_REPORT_PATH);
+      navigate(listHref);
     } catch {
       /* Shown in the dialog. */
     }
@@ -361,9 +363,9 @@ export default function BugReportDetailPage() {
 
   return (
     <>
-      <Link to={BUG_REPORT_PATH} className="mb-2 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-indigo-700">
+      <Link to={listHref} className="mb-2 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-indigo-700">
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        Bug reports
+        {project.name} · Bug reports
       </Link>
 
       {isPending ? (
@@ -418,9 +420,9 @@ export default function BugReportDetailPage() {
               </div>
             )}
             {report.status === "SUCCEEDED" && report.report && (
-              <ReportEditor key={report.completedAt} data={report} canChange={canChange} />
+              <ReportEditor key={report.completedAt} projectId={project.id} data={report} canChange={canChange} />
             )}
-            <FolderFiles data={report} />
+            <FolderFiles projectId={project.id} data={report} />
             <TesterInput input={report.input} />
           </div>
 

@@ -42,7 +42,7 @@ describe("Documents tab", () => {
     expect(screen.getByText(/1 section · .* · notes\.md/)).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Generate test cases from Add-ons PRD" }),
-    ).toHaveAttribute("href", "/tools/prd-to-test-cases?project=p1&document=d1");
+    ).toHaveAttribute("href", "/projects/p1/tools/prd-to-test-cases?document=d1");
 
     await user.click(screen.getAllByText("View sections")[0]);
     expect(await screen.findByText("3.2 Purchase flow")).toBeInTheDocument();
@@ -181,7 +181,7 @@ describe("PRD → Test cases tool", () => {
   function mockTool(overrides = {}) {
     let pending = { items: [], total: 0 };
     return mockApi({
-      "GET /api/projects": { items: [project({ id: "p1", name: "Alpha" })], total: 1 },
+      "GET /api/projects/p1": project({ id: "p1", name: "Alpha", urls: [], urlCount: 0 }),
       "GET /api/projects/p1/documents": {
         items: [doc(), doc({ id: "d2", title: "Older notes", sectionCount: 1 })],
         total: 2,
@@ -223,7 +223,7 @@ describe("PRD → Test cases tool", () => {
     const user = userEvent.setup();
     const mock = mockTool();
 
-    renderRoute("/tools/prd-to-test-cases?project=p1");
+    renderRoute("/projects/p1/tools/prd-to-test-cases");
 
     expect(await screen.findByRole("combobox", { name: "Document" })).toHaveValue("d1");
     const main = screen.getByRole("main");
@@ -262,7 +262,7 @@ describe("PRD → Test cases tool", () => {
       "GET /api/projects/p1/documents/d2": { ...doc({ id: "d2", title: "Older notes" }), sections: many },
     });
 
-    renderRoute("/tools/prd-to-test-cases?project=p1&document=d2");
+    renderRoute("/projects/p1/tools/prd-to-test-cases?document=d2");
 
     expect(await screen.findByRole("combobox", { name: "Document" })).toHaveValue("d2");
     await user.click(await screen.findByRole("button", { name: "Select first 10" }));
@@ -275,7 +275,7 @@ describe("PRD → Test cases tool", () => {
   it("offers to add a document when the project has none", async () => {
     mockTool({ "GET /api/projects/p1/documents": { items: [], total: 0 } });
 
-    renderRoute("/tools/prd-to-test-cases?project=p1");
+    renderRoute("/projects/p1/tools/prd-to-test-cases");
 
     expect(await screen.findByText("No documents yet")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add document" })).toBeInTheDocument();

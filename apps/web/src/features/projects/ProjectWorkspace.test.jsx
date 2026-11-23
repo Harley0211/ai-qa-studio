@@ -1,7 +1,7 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { apiError, mockApi, project, renderRoute } from "../../test/utils.jsx";
+import { apiError, mockApi, project, renderRoute, signedInUser } from "../../test/utils.jsx";
 
 const withUrls = (urls = []) => project({ urls, urlCount: urls.length });
 const url = (o = {}) => ({
@@ -39,6 +39,22 @@ describe("Project workspace", () => {
       ).toBeInTheDocument();
     }
     expect(screen.getByText("Project details")).toBeInTheDocument();
+    // Admins manage the project; everyone can switch back to the picker.
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+    expect(within(screen.getByRole("main")).getByRole("link", { name: "Switch project" })).toHaveAttribute("href", "/projects");
+  });
+
+  it("hides Edit and Delete from members", async () => {
+    mockApi({
+      "GET /api/auth/status": { setupRequired: false, user: signedInUser({ id: "u2", role: "MEMBER" }) },
+      "GET /api/projects/p1": withUrls([url()]),
+    });
+    renderRoute("/projects/p1");
+
+    expect(await screen.findByRole("heading", { name: "Alpha" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
   });
 
   it("shows an empty state on the URLs tab", async () => {

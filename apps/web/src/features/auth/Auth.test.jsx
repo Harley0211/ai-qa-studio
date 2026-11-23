@@ -39,6 +39,29 @@ describe("Signing in", () => {
     expect(screen.getByText("Ada Admin")).toBeInTheDocument();
   });
 
+  it("always starts on the project picker after signing in", async () => {
+    const user = userEvent.setup();
+    let status = signedOut;
+    mockApi({
+      [STATUS]: () => status,
+      "GET /api/projects": projectsList,
+      "POST /api/auth/login": () => {
+        status = { setupRequired: false, user: signedInUser({ role: "MEMBER" }) };
+        return { user: signedInUser({ role: "MEMBER" }) };
+      },
+    });
+
+    // Even when signing in from a link deep inside a project's tool.
+    renderRoute("/projects/p9/tools/bug-report");
+
+    await user.type(await screen.findByLabelText("Email"), "ada@example.com");
+    await user.type(screen.getByLabelText("Password"), "correct horse 1");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(await screen.findByRole("heading", { name: "Choose a project" })).toBeInTheDocument();
+    expect(screen.getByText("Choose a project to use the tools.")).toBeInTheDocument();
+  });
+
   it("shows the server's message for a wrong password", async () => {
     const user = userEvent.setup();
     mockApi({

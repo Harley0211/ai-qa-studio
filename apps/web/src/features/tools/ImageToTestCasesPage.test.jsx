@@ -11,20 +11,15 @@ const image = (id, filename) => ({
   createdAt: "2026-01-01T00:00:00.000Z",
 });
 
-const projects = {
-  items: [
-    project({ id: "p1", name: "Alpha" }),
-    project({ id: "p2", name: "Beta" }),
-  ],
-  total: 2,
-};
+const alpha = project({ id: "p1", name: "Alpha" });
+const beta = project({ id: "p2", name: "Beta" });
 
 describe("Image → Test cases tool", () => {
-  it("defaults to the first project and generates with the chosen format and focus", async () => {
+  it("works in the project you're in, with the chosen format and focus", async () => {
     const user = userEvent.setup();
     let pending = { items: [], total: 0 };
     const mock = mockApi({
-      "GET /api/projects": projects,
+      "GET /api/projects/p1": alpha,
       "GET /api/projects/p1/evidence": evidence([image("e1", "login.png")]),
       "GET /api/projects/p1/generations?review=pending": () => pending,
       "POST /api/projects/p1/generations": () => {
@@ -52,26 +47,24 @@ describe("Image → Test cases tool", () => {
       },
     });
 
-    renderRoute("/tools/image-to-test-cases");
+    renderRoute("/projects/p1/tools/image-to-test-cases");
 
     expect(await screen.findByAltText("login.png")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Project" })).toHaveValue("p1");
+    const main = screen.getByRole("main");
+    expect(within(main).getByRole("link", { name: "Alpha" })).toHaveAttribute("href", "/projects/p1");
+    // No project switcher inside the tool: you switch from the project picker.
+    expect(within(main).queryByRole("combobox", { name: "Project" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /Expected result per step/ }));
     await user.click(screen.getByRole("button", { name: "Negative" }));
-    // The sidebar group toggle shares this label, so look inside the main area.
-    await user.click(
-      within(screen.getByRole("main")).getByRole("button", { name: "Generate from 1 image" }),
-    );
+    await user.click(within(main).getByRole("button", { name: "Generate from 1 image" }));
 
     expect(await screen.findByText("Test case generation started.")).toBeInTheDocument();
 
     const body = mock.find("POST", "/api/projects/p1/generations")[0].body;
     expect(body.evidenceIds).toEqual(["e1"]);
     expect(body.generationFormat).toBe("PER_STEP");
-    expect(body.message).toContain(
-      "Focus especially on these test types: Functional, Negative.",
-    );
+    expect(body.message).toContain("Focus especially on these test types: Functional, Negative.");
 
     // Finished runs go to review instead of straight into the library.
     expect(await screen.findByText("Test cases are ready to review.")).toBeInTheDocument();
@@ -79,45 +72,37 @@ describe("Image → Test cases tool", () => {
     expect(mock.find("POST", "/api/projects/p1/generations/run1/accept")).toHaveLength(0);
   });
 
-  it("uses the project from the URL and lets you switch projects", async () => {
-    const user = userEvent.setup();
-    mockApi({
-      "GET /api/projects": projects,
-      "GET /api/projects/p1/evidence": evidence([image("e1", "alpha.png")]),
+  it("only shows the evidence of the project in the URL", async () => {
+    const mock = mockApi({
+      "GET /api/projects/p2": beta,
       "GET /api/projects/p2/evidence": evidence([image("e2", "beta.png")]),
+      "GET /api/projects/p2/generations?review=pending": { items: [], total: 0 },
     });
 
-    renderRoute("/tools/image-to-test-cases?project=p2");
+    renderRoute("/projects/p2/tools/image-to-test-cases");
 
     expect(await screen.findByAltText("beta.png")).toBeInTheDocument();
-
-    await user.selectOptions(screen.getByRole("combobox", { name: "Project" }), "p1");
-
-    expect(await screen.findByAltText("alpha.png")).toBeInTheDocument();
-    expect(screen.queryByAltText("beta.png")).not.toBeInTheDocument();
+    expect(screen.getByText(/Turn screenshots into test cases for Beta/)).toBeInTheDocument();
+    expect(mock.calls.some((call) => call.url.includes("/projects/p1/"))).toBe(false);
   });
 
   it("disables generation until an image is uploaded", async () => {
     mockApi({
-      "GET /api/projects": projects,
+      "GET /api/projects/p1": alpha,
       "GET /api/projects/p1/evidence": evidence([]),
     });
 
-    renderRoute("/tools/image-to-test-cases?project=p1");
+    renderRoute("/projects/p1/tools/image-to-test-cases");
 
-    expect(
-      await screen.findByText("No images uploaded for this project yet."),
-    ).toBeInTheDocument();
-    expect(
-      within(screen.getByRole("main")).getByRole("button", { name: "Generate from 0 images" }),
-    ).toBeDisabled();
+    expect(await screen.findByText("No images uploaded for this project yet.")).toBeInTheDocument();
+    expect(within(screen.getByRole("main")).getByRole("button", { name: "Generate from 0 images" })).toBeDisabled();
     expect(screen.getByText("Upload at least one image to start.")).toBeInTheDocument();
   });
 
   it("pre-selects only new images and sends just those", async () => {
     const user = userEvent.setup();
     const mock = mockApi({
-      "GET /api/projects": projects,
+      "GET /api/projects/p1": alpha,
       "GET /api/projects/p1/evidence": evidence([
         { ...image("e2", "new.png"), lastUsedAt: null },
         { ...image("e1", "old.png"), lastUsedAt: "2026-01-01T10:00:00.000Z" },
@@ -127,14 +112,12 @@ describe("Image → Test cases tool", () => {
       "GET /api/projects/p1/generations/run1": { data: { id: "run1", status: "PENDING" } },
     });
 
-    renderRoute("/tools/image-to-test-cases?project=p1");
+    renderRoute("/projects/p1/tools/image-to-test-cases");
 
     expect(await screen.findByRole("checkbox", { name: "Use new.png" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Use old.png" })).not.toBeChecked();
 
-    await user.click(
-      within(screen.getByRole("main")).getByRole("button", { name: "Generate from 1 image" }),
-    );
+    await user.click(within(screen.getByRole("main")).getByRole("button", { name: "Generate from 1 image" }));
     await screen.findByText("Test case generation started.");
     expect(mock.find("POST", "/api/projects/p1/generations")[0].body.evidenceIds).toEqual(["e2"]);
   });
@@ -143,12 +126,12 @@ describe("Image → Test cases tool", () => {
     const user = userEvent.setup();
     const many = Array.from({ length: 21 }, (_, i) => image(`e${i}`, `screen-${i}.png`));
     mockApi({
-      "GET /api/projects": projects,
+      "GET /api/projects/p1": alpha,
       "GET /api/projects/p1/evidence": evidence(many),
       "GET /api/projects/p1/generations?review=pending": { items: [], total: 0 },
     });
 
-    renderRoute("/tools/image-to-test-cases?project=p1");
+    renderRoute("/projects/p1/tools/image-to-test-cases");
 
     const generate = await within(await screen.findByRole("main")).findByRole("button", {
       name: "Generate from 21 images",
@@ -157,26 +140,27 @@ describe("Image → Test cases tool", () => {
     expect(screen.getByText("Select at most 20 images (21 selected).")).toBeInTheDocument();
 
     await user.click(screen.getByRole("checkbox", { name: "Use screen-0.png" }));
-    expect(
-      within(screen.getByRole("main")).getByRole("button", { name: "Generate from 20 images" }),
-    ).toBeEnabled();
+    expect(within(screen.getByRole("main")).getByRole("button", { name: "Generate from 20 images" })).toBeEnabled();
   });
 
-  it("asks you to create a project when there are none", async () => {
-    mockApi({ "GET /api/projects": { items: [], total: 0 } });
+  it("says so when the project doesn't exist", async () => {
+    mockApi();
+    renderRoute("/projects/gone/tools/image-to-test-cases");
 
-    renderRoute("/tools/image-to-test-cases");
+    expect(await screen.findByText("Project not found")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Choose a project" })).toHaveAttribute("href", "/projects");
+  });
 
-    expect(await screen.findByText("No projects yet")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Go to projects" })).toHaveAttribute(
-      "href",
-      "/projects",
-    );
+  it("sends old tool links to the project picker", async () => {
+    mockApi({ "GET /api/projects": { items: [alpha], total: 1 } });
+    renderRoute("/tools/image-to-test-cases?project=p1");
+
+    expect(await screen.findByRole("heading", { name: "Choose a project" })).toBeInTheDocument();
   });
 });
 
 describe("Sidebar tools", () => {
-  it("links both tools to the current project", async () => {
+  it("inside a project, shows the project and links every tool to it", async () => {
     mockApi({
       "GET /api/projects/p1": project({ urls: [], urlCount: 0 }),
       "GET /api/projects/p1/test-cases": { items: [], total: 0 },
@@ -185,27 +169,50 @@ describe("Sidebar tools", () => {
     renderRoute("/projects/p1");
 
     const sidebar = await screen.findByRole("complementary", { name: "Primary" });
-    expect(
-      within(sidebar).getByRole("link", { name: "From image evidence" }),
-    ).toHaveAttribute("href", "/tools/image-to-test-cases?project=p1");
+    expect(await within(sidebar).findByRole("link", { name: "Alpha" })).toHaveAttribute("href", "/projects/p1");
+    expect(within(sidebar).getByRole("link", { name: "Switch project" })).toHaveAttribute("href", "/projects");
+    expect(within(sidebar).getByRole("link", { name: "From image evidence" })).toHaveAttribute(
+      "href",
+      "/projects/p1/tools/image-to-test-cases",
+    );
+    expect(within(sidebar).getByRole("link", { name: "From PRD / document" })).toHaveAttribute(
+      "href",
+      "/projects/p1/tools/prd-to-test-cases",
+    );
+    expect(within(sidebar).getByRole("link", { name: "Bug report" })).toHaveAttribute("href", "/projects/p1/tools/bug-report");
+    expect(within(sidebar).getByRole("link", { name: "HAR reader" })).toHaveAttribute("href", "/projects/p1/tools/har-reader");
+  });
 
-    expect(
-      within(sidebar).getByRole("link", { name: "From PRD / document" }),
-    ).toHaveAttribute("href", "/tools/prd-to-test-cases?project=p1");
+  it("locks the tools until a project is chosen", async () => {
+    mockApi({ "GET /api/projects": { items: [alpha], total: 1 } });
+
+    renderRoute("/projects");
+
+    const sidebar = await screen.findByRole("complementary", { name: "Primary" });
+    const locked = within(sidebar).getByRole("group", { name: "Tools (choose a project first)" });
+    expect(within(locked).getByText("Choose a project to use the tools.")).toBeInTheDocument();
+    for (const name of ["From image evidence", "From PRD / document", "Bug report", "HAR reader"]) {
+      expect(within(sidebar).queryByRole("link", { name })).not.toBeInTheDocument();
+      expect(within(locked).getByText(name)).toHaveAttribute("aria-disabled", "true");
+    }
   });
 
   it("collapses and expands the tools group", async () => {
     const user = userEvent.setup();
-    mockApi({ "GET /api/projects": { items: [], total: 0 } });
+    mockApi({
+      "GET /api/projects/p1": project({ urls: [], urlCount: 0 }),
+      "GET /api/projects/p1/test-cases": { items: [], total: 0 },
+    });
 
-    renderRoute("/projects");
+    renderRoute("/projects/p1");
 
-    const toggle = await screen.findByRole("button", { name: "Generate test cases" });
+    const sidebar = await screen.findByRole("complementary", { name: "Primary" });
+    const toggle = await within(sidebar).findByRole("button", { name: "Generate test cases" });
     expect(toggle).toHaveAttribute("aria-expanded", "true");
 
     await user.click(toggle);
 
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("link", { name: "From image evidence" })).not.toBeInTheDocument();
+    expect(within(sidebar).queryByRole("link", { name: "From image evidence" })).not.toBeInTheDocument();
   });
 });

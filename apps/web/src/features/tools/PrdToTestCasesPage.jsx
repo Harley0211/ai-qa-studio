@@ -1,6 +1,6 @@
-import { FileText, FolderKanban, Plus, Sparkles } from "lucide-react";
+import { FileText, Plus, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useOutletContext, useSearchParams } from "react-router-dom";
 import { PageHeader } from "../../components/layout/PageHeader.jsx";
 import { Button } from "../../components/ui/Button.jsx";
 import { EmptyState, ErrorState, LoadingState } from "../../components/ui/States.jsx";
@@ -10,7 +10,7 @@ import { useDocument, useDocuments, useGenerateFromDocument } from "../documents
 import { FocusPicker, FormatPicker } from "../evidence/GenerationOptions.jsx";
 import { PendingReviews } from "../evidence/GenerationReview.jsx";
 import { useRunsProgress } from "../evidence/generation.hooks.js";
-import { useProjects } from "../projects/hooks.js";
+import { ToolCrumb } from "./ToolCrumb.jsx";
 
 // Matches the server limit for one request.
 export const MAX_SECTIONS_PER_RUN = 10;
@@ -230,78 +230,27 @@ function PrdTool({ projectId, documentId, onDocumentChange }) {
   );
 }
 
+// PRD → Test cases, for the project you're in.
 export default function PrdToTestCasesPage() {
+  const { project } = useOutletContext();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { data, isPending, isError, error, refetch } = useProjects();
-  const projects = data?.items ?? [];
-  const project = projects.find((p) => p.id === searchParams.get("project")) ?? null;
   const documentId = searchParams.get("document");
 
-  useEffect(() => {
-    if (!isPending && projects.length > 0 && !project) {
-      setSearchParams({ project: projects[0].id }, { replace: true });
-    }
-  }, [isPending, projects, project, setSearchParams]);
-
   function setDocument(id) {
-    setSearchParams({ project: project.id, document: id }, { replace: true });
-  }
-
-  let content;
-  if (isPending) {
-    content = <LoadingState label="Loading projects..." />;
-  } else if (isError) {
-    content = <ErrorState error={error} onRetry={() => refetch()} />;
-  } else if (projects.length === 0) {
-    content = (
-      <EmptyState
-        icon={FolderKanban}
-        title="No projects yet"
-        description="Create a project first. Generated test cases are saved to a project."
-        action={
-          <Link to="/projects" className="text-sm font-medium text-indigo-600 hover:underline">
-            Go to projects
-          </Link>
-        }
-      />
-    );
-  } else if (project) {
-    content = (
-      <div key={project.id} className="space-y-6">
-        <PendingReviews projectId={project.id} />
-        <PrdTool projectId={project.id} documentId={documentId} onDocumentChange={setDocument} />
-      </div>
-    );
-  } else {
-    content = <LoadingState label="Loading project..." />;
+    setSearchParams({ document: id }, { replace: true });
   }
 
   return (
     <>
-      <p className="mb-2 text-sm text-slate-500">Tools / From PRD / document</p>
+      <ToolCrumb project={project} tool="From PRD / document" />
       <PageHeader
         title="PRD → Test cases"
-        description="Turn requirements into test cases, section by section."
-        actions={
-          projects.length > 0 && (
-            <label className="flex items-center gap-2 text-sm text-slate-600">
-              Project
-              <select
-                value={project?.id ?? ""}
-                onChange={(event) => setSearchParams({ project: event.target.value })}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 focus:outline-2 focus:outline-indigo-600"
-              >
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )
-        }
+        description={`Turn requirements into test cases for ${project.name}, section by section.`}
       />
-      {content}
+      <div key={project.id} className="space-y-6">
+        <PendingReviews projectId={project.id} />
+        <PrdTool projectId={project.id} documentId={documentId} onDocumentChange={setDocument} />
+      </div>
     </>
   );
 }

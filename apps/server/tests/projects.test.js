@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { api, createProject, prisma, resetDb } from './helpers.js';
+import request from 'supertest';
+import { api, app, createProject, createSignedInUser, prisma, resetDb } from './helpers.js';
 
 beforeEach(resetDb);
 afterAll(() => prisma.$disconnect());
@@ -150,5 +151,26 @@ describe('DELETE /api/projects/:id', () => {
   it('returns 404 for an unknown project', async () => {
     const res = await api().delete('/api/projects/nope');
     expect(res.status).toBe(404);
+  });
+});
+
+describe('Who can manage projects', () => {
+  it('lets members open projects but only admins create, rename or delete them', async () => {
+    const p = await createProject({ name: 'PNCC' });
+    const member = await createSignedInUser({ email: 'member@test.local', name: 'Member' });
+    const asMember = (method, url) => request(app)[method](url).set('Cookie', member.cookie);
+
+    expect((await asMember('get', '/api/projects')).body.total).toBe(1);
+    expect((await asMember('get', `/api/projects/${p.id}`)).status).toBe(200);
+
+    const created = await asMember('post', '/api/projects').send({ name: 'Fiber' });
+    expect(created.status).toBe(403);
+    expect(created.body.error.code).toBe('FORBIDDEN');
+    expect((await asMember('patch', `/api/projects/${p.id}`).send({ name: 'Renamed' })).status).toBe(403);
+    expect((await asMember('delete', `/api/projects/${p.id}`)).status).toBe(403);
+    expect(await prisma.project.count()).toBe(1);
+
+    // Working inside the project is still allowed.
+    expect((await asMember('post', `/api/projects/${p.id}/urls`).send({ url: 'https://member.example' })).status).toBe(201);
   });
 });

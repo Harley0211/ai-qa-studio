@@ -38,7 +38,7 @@ export function sendStoredFile(res, next, { file, path: filePath }, download) {
   });
 }
 
-// POST   /api/bug-reports                    start one: "details" (JSON) + up to
+// (all under /api/projects/:projectId; a report is only visible in its project)                   start one: "details" (JSON) + up to
 //                                           12 "images" the AI looks at
 // POST   /api/bug-reports/:id/files          add a file to its folder ("kind", "file")
 // GET    /api/bug-reports                    all reports, newest first
@@ -48,7 +48,7 @@ export function sendStoredFile(res, next, { file, path: filePath }, download) {
 // DELETE /api/bug-reports/:id                delete the report and its folder
 // GET    /api/bug-reports/:id/files/:fileId  download one file
 export function bugReportsRouter({ service, maxUploadBytes, maxFileBytes }) {
-  const router = Router();
+  const router = Router({ mergeParams: true });
   const imageUpload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: maxUploadBytes, files: MAX_BUG_REPORT_IMAGES, fieldSize: 512 * 1024 },
@@ -80,21 +80,21 @@ export function bugReportsRouter({ service, maxUploadBytes, maxFileBytes }) {
         };
       });
 
-      res.status(202).json({ data: await service.create(req.auth.user, input, images) });
+      res.status(202).json({ data: await service.create(req.auth.user, req.params.projectId, input, images) });
     }),
   );
 
   router.get(
     "/",
-    asyncHandler(async (_req, res) => {
-      res.json(await service.list());
+    asyncHandler(async (req, res) => {
+      res.json(await service.list(req.params.projectId));
     }),
   );
 
   router.get(
     "/:id",
     asyncHandler(async (req, res) => {
-      res.json({ data: await service.get(req.params.id) });
+      res.json({ data: await service.get(req.params.projectId, req.params.id) });
     }),
   );
 
@@ -102,21 +102,21 @@ export function bugReportsRouter({ service, maxUploadBytes, maxFileBytes }) {
     "/:id",
     asyncHandler(async (req, res) => {
       const changes = bugReportUpdateSchema.parse(req.body ?? {});
-      res.json({ data: await service.update(req.auth.user, req.params.id, changes) });
+      res.json({ data: await service.update(req.auth.user, req.params.projectId, req.params.id, changes) });
     }),
   );
 
   router.post(
     "/:id/retry",
     asyncHandler(async (req, res) => {
-      res.status(202).json({ data: await service.retry(req.auth.user, req.params.id) });
+      res.status(202).json({ data: await service.retry(req.auth.user, req.params.projectId, req.params.id) });
     }),
   );
 
   router.delete(
     "/:id",
     asyncHandler(async (req, res) => {
-      await service.remove(req.auth.user, req.params.id);
+      await service.remove(req.auth.user, req.params.projectId, req.params.id);
       res.status(204).end();
     }),
   );
@@ -131,7 +131,7 @@ export function bugReportsRouter({ service, maxUploadBytes, maxFileBytes }) {
         if (!BUG_REPORT_FILE_KINDS.includes(kind)) {
           throw new ApiError(400, "VALIDATION_ERROR", `kind must be one of ${BUG_REPORT_FILE_KINDS.join(", ")}`);
         }
-        res.status(201).json({ data: await service.addFile(req.auth.user, req.params.id, req.file, kind) });
+        res.status(201).json({ data: await service.addFile(req.auth.user, req.params.projectId, req.params.id, req.file, kind) });
       } finally {
         // Moved into the folder on success; otherwise no longer needed.
         await unlink(req.file.path).catch(() => {});
@@ -142,7 +142,7 @@ export function bugReportsRouter({ service, maxUploadBytes, maxFileBytes }) {
   router.get(
     "/:id/files/:fileId",
     asyncHandler(async (req, res, next) => {
-      sendStoredFile(res, next, await service.file(req.params.id, req.params.fileId), req.query.download === "1");
+      sendStoredFile(res, next, await service.file(req.params.projectId, req.params.id, req.params.fileId), req.query.download === "1");
     }),
   );
 

@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-import { apiError, mockApi, project, renderRoute } from '../../test/utils.jsx';
+import { apiError, mockApi, project, renderRoute, signedInUser } from '../../test/utils.jsx';
 
 describe('Projects dashboard', () => {
   it('shows a loading state and then the project cards', async () => {
@@ -33,9 +33,7 @@ describe('Projects dashboard', () => {
     expect(within(alpha).getByText('1 URL')).toBeInTheDocument();
     expect(within(alpha).getByText('11 test cases')).toBeInTheDocument();
     expect(within(alpha).getByText('1 image')).toBeInTheDocument();
-    expect(
-      within(alpha).getByRole('link', { name: 'Image → test cases for Alpha' }),
-    ).toHaveAttribute('href', '/tools/image-to-test-cases?project=p1');
+    expect(within(alpha).getByRole('link', { name: /Open project/ })).toHaveAttribute('href', '/projects/p1');
   });
 
   it('shows an empty state with a call to action when there are no projects', async () => {
@@ -127,3 +125,37 @@ describe('Projects dashboard', () => {
 function json201(body) {
   return new Response(JSON.stringify(body), { status: 201, headers: { 'Content-Type': 'application/json' } });
 }
+
+describe('Choosing a project', () => {
+  const member = { setupRequired: false, user: signedInUser({ id: 'u2', role: 'MEMBER', name: 'Mia Member' }) };
+  const list = { items: [project({ id: 'p1', name: 'PNCC' }), project({ id: 'p2', name: 'Fiber' })], total: 2 };
+
+  it('is the start page, and members can open projects but not add, edit or delete them', async () => {
+    mockApi({ 'GET /api/auth/status': member, 'GET /api/projects': list });
+    renderRoute('/');
+
+    expect(await screen.findByRole('heading', { name: 'Choose a project' })).toBeInTheDocument();
+    const pncc = (await screen.findByRole('heading', { name: 'PNCC' })).closest('li');
+    expect(within(pncc).getByRole('link', { name: /Open project/ })).toHaveAttribute('href', '/projects/p1');
+    expect(screen.queryByRole('button', { name: 'New project' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit PNCC' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Delete PNCC' })).not.toBeInTheDocument();
+  });
+
+  it('tells members to ask an admin when there are no projects', async () => {
+    mockApi({ 'GET /api/auth/status': member, 'GET /api/projects': { items: [], total: 0 } });
+    renderRoute('/projects');
+
+    expect(await screen.findByText('Ask an admin to create a project for your team.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /create your first project/i })).not.toBeInTheDocument();
+  });
+
+  it('lets admins add, edit and delete projects', async () => {
+    mockApi({ 'GET /api/projects': list });
+    renderRoute('/projects');
+
+    expect(await screen.findByRole('button', { name: 'New project' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Edit PNCC' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete Fiber' })).toBeInTheDocument();
+  });
+});

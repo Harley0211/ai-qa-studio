@@ -38,15 +38,17 @@ model BugReport {
   input        String
   report       String?   // JSON: the generated report
   texts        String?   // JSON: Jira/Slack texts as edited and saved
+  projectId    String    // a report belongs to one project and is only shown there
   createdById  String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   completedAt  DateTime?
 
+  project   Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdBy User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
   files     BugReportFile[]
 
-  @@index([createdAt])
+  @@index([projectId, createdAt])
   @@index([status])
 }
 
@@ -74,12 +76,14 @@ model HarFile {
   size        Int
   summary     String   // JSON: request and error counts, for the list
   storageKey  String
+  projectId   String   // only shown in its project
   createdById String?
   createdAt   DateTime @default(now())
 
-  createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
-  @@index([createdAt])
+  @@index([projectId, createdAt])
 }
 
 // A signed-in browser. Only a hash of the cookie token is stored.
@@ -106,6 +110,8 @@ model Project {
   testCases   TestCase[]
   generations GenerationRun[]
   documents   Document[]
+  bugReports  BugReport[]
+  harFiles    HarFile[]
   nextTestCaseNumber Int @default(1)
 
   @@index([updatedAt])

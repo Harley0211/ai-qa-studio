@@ -1,10 +1,9 @@
-import { FolderKanban, ImagePlus, Sparkles } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { ImagePlus, Sparkles } from "lucide-react";
+import { useRef, useState } from "react";
+import { Link, useOutletContext } from "react-router-dom";
 import { PageHeader } from "../../components/layout/PageHeader.jsx";
 import { Button } from "../../components/ui/Button.jsx";
 import {
-  EmptyState,
   ErrorState,
   LoadingState,
 } from "../../components/ui/States.jsx";
@@ -25,7 +24,7 @@ import {
 } from "../evidence/EvidenceSelection.jsx";
 import { useEvidence, useUploadEvidence } from "../evidence/hooks.js";
 import { validateImageFile } from "../evidence/upload.js";
-import { useProjects } from "../projects/hooks.js";
+import { ToolCrumb } from "./ToolCrumb.jsx";
 
 function StepHeading({ number, children }) {
   return (
@@ -251,75 +250,18 @@ function ImageTool({ projectId }) {
   );
 }
 
+// Image → Test cases, for the project you're in.
 export default function ImageToTestCasesPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const { data, isPending, isError, error, refetch } = useProjects();
-  const projects = data?.items ?? [];
-  const requestedId = searchParams.get("project");
-  const project = projects.find((p) => p.id === requestedId) ?? null;
+  const { project } = useOutletContext();
 
-  // No (or an unknown) project in the URL: default to the most recently updated one.
-  useEffect(() => {
-    if (!isPending && projects.length > 0 && !project) {
-      setSearchParams({ project: projects[0].id }, { replace: true });
-    }
-  }, [isPending, projects, project, setSearchParams]);
-
-  let content;
-  if (isPending) {
-    content = <LoadingState label="Loading projects..." />;
-  } else if (isError) {
-    content = <ErrorState error={error} onRetry={() => refetch()} />;
-  } else if (projects.length === 0) {
-    content = (
-      <EmptyState
-        icon={FolderKanban}
-        title="No projects yet"
-        description="Create a project first. Generated test cases are saved to a project."
-        action={
-          <Link to="/projects" className="text-sm font-medium text-indigo-600 hover:underline">
-            Go to projects
-          </Link>
-        }
-      />
-    );
-  } else if (project) {
-    content = (
+  return (
+    <>
+      <ToolCrumb project={project} tool="From image evidence" />
+      <PageHeader title="Image → Test cases" description={`Turn screenshots into test cases for ${project.name}.`} />
       <div key={project.id} className="space-y-6">
         <PendingReviews projectId={project.id} />
         <ImageTool projectId={project.id} />
       </div>
-    );
-  } else {
-    content = <LoadingState label="Loading project..." />;
-  }
-
-  return (
-    <>
-      <p className="mb-2 text-sm text-slate-500">Tools / From image evidence</p>
-      <PageHeader
-        title="Image → Test cases"
-        description="Turn screenshots into test cases for a project."
-        actions={
-          projects.length > 0 && (
-            <label className="flex items-center gap-2 text-sm text-slate-600">
-              Project
-              <select
-                value={project?.id ?? ""}
-                onChange={(event) => setSearchParams({ project: event.target.value })}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 focus:outline-2 focus:outline-indigo-600"
-              >
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )
-        }
-      />
-      {content}
     </>
   );
 }

@@ -25,12 +25,18 @@ const har = Buffer.from(JSON.stringify({ log: { entries: [] } }));
 
 function save(body = summary, name = "session.har") {
   return api()
-    .post("/api/har-files")
+    .post(base)
     .field("summary", JSON.stringify(body))
     .attach("file", har, { filename: name, contentType: "application/json" });
 }
 
-beforeEach(resetDb);
+let base;
+let project;
+beforeEach(async () => {
+  await resetDb();
+  project = (await api().post("/api/projects").send({ name: "PNCC" })).body;
+  base = `/api/projects/${project.id}/har-files`;
+});
 afterAll(async () => {
   rmSync(filesRoot, { recursive: true, force: true });
   await prisma.$disconnect();
@@ -44,10 +50,10 @@ describe("HAR library", () => {
     const { id } = res.body.data;
     expect(existsSync(path.join(filesRoot, "har-files", id, "session.har"))).toBe(true);
 
-    const list = await api().get("/api/har-files");
+    const list = await api().get(base);
     expect(list.body.items.map((item) => item.id)).toEqual([id]);
 
-    const file = await api().get(`/api/har-files/${id}/file`);
+    const file = await api().get(`${base}/${id}/file`);
     expect(file.status).toBe(200);
     expect(file.headers["content-disposition"]).toMatch(/attachment; filename="session.har"/);
     expect(JSON.parse(file.text ?? file.body.toString())).toEqual({ log: { entries: [] } });
@@ -55,8 +61,8 @@ describe("HAR library", () => {
 
   it("needs a valid summary and a file", async () => {
     expect((await save({ total: "many" })).status).toBe(400);
-    expect((await api().post("/api/har-files").field("summary", JSON.stringify(summary))).status).toBe(400);
-    expect((await api().get("/api/har-files")).body.total).toBe(0);
+    expect((await api().post(base).field("summary", JSON.stringify(summary))).status).toBe(400);
+    expect((await api().get(base)).body.total).toBe(0);
   });
 
   it("deletes the HAR and its folder; only the uploader or an admin may", async () => {
@@ -64,16 +70,40 @@ describe("HAR library", () => {
     const dir = path.join(filesRoot, "har-files", id);
     const member = await createSignedInUser({ email: "member@test.local", name: "Member" });
 
-    expect((await request(app).get(`/api/har-files/${id}`).set("Cookie", member.cookie)).status).toBe(200);
-    expect((await request(app).delete(`/api/har-files/${id}`).set("Cookie", member.cookie)).status).toBe(403);
+    expect((await request(app).get(`${base}/${id}`).set("Cookie", member.cookie)).status).toBe(200);
+    expect((await request(app).delete(`${base}/${id}`).set("Cookie", member.cookie)).status).toBe(403);
     expect(existsSync(dir)).toBe(true);
 
-    expect((await api().delete(`/api/har-files/${id}`)).status).toBe(204);
+    expect((await api().delete(`${base}/${id}`)).status).toBe(204);
     expect(existsSync(dir)).toBe(false);
-    expect((await api().get(`/api/har-files/${id}`)).status).toBe(404);
+    expect((await api().get(`${base}/${id}`)).status).toBe(404);
   });
 
   it("needs a sign-in", async () => {
-    expect((await request(app).get("/api/har-files")).status).toBe(401);
+    expect((await request(app).get(base)).status).toBe(401);
+  });
+
+  it("keeps each project's HAR files to itself", async () => {
+    const { id } = (await save()).body.data;
+    const fiber = (await api().post("/api/projects").send({ name: "Fiber" })).body;
+    const fiberBase = `/api/projects/${fiber.id}/har-files`;
+
+    expect((await api().get(fiberBase)).body.items).toEqual([]);
+    expect((await api().get(`${fiberBase}/${id}`)).status).toBe(404);
+    expect((await api().get(`${fiberBase}/${id}/file`)).status).toBe(404);
+    expect((await api().delete(`${fiberBase}/${id}`)).status).toBe(404);
+    expect((await api().get(`${base}/${id}`)).status).toBe(200);
+
+    expect((await api().get("/api/projects/nope/har-files")).status).toBe(404);
+  });
+
+  it("deletes a project's HAR folders with the project", async () => {
+    const { id } = (await save()).body.data;
+    const dir = path.join(filesRoot, "har-files", id);
+    expect(existsSync(dir)).toBe(true);
+
+    expect((await api().delete(`/api/projects/${project.id}`)).status).toBe(204);
+    expect(existsSync(dir)).toBe(false);
+    expect(await prisma.harFile.count()).toBe(0);
   });
 });

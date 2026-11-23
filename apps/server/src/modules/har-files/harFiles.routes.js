@@ -6,7 +6,8 @@ import { ApiError } from "../../lib/errors.js";
 import { safeFileName } from "../../lib/fileStore.js";
 import { diskUpload, sendStoredFile } from "../bug-reports/bugReports.routes.js";
 
-// The HAR reader's library: every HAR opened in the reader is saved (the
+// The HAR reader's library (under /api/projects/:projectId; a HAR is only
+// visible in its project): every HAR opened in the reader is saved (the
 // browser uploads a redacted copy) in its own folder, storage/har-files/<id>/.
 // Shared with the team; the uploader or an admin can delete one, which deletes
 // its folder too.
@@ -38,11 +39,11 @@ const view = (row) => ({
 const withCreator = { createdBy: { select: { id: true, name: true } } };
 
 export function harFilesRouter({ prisma, store, maxFileBytes }) {
-  const router = Router();
+  const router = Router({ mergeParams: true });
   const upload = diskUpload(maxFileBytes);
 
-  async function findOr404(id) {
-    const row = await prisma.harFile.findUnique({ where: { id }, include: withCreator });
+  async function findOr404(projectId, id) {
+    const row = await prisma.harFile.findFirst({ where: { id, projectId }, include: withCreator });
     if (!row) throw new ApiError(404, "NOT_FOUND", "HAR file not found");
     return row;
   }
@@ -61,7 +62,14 @@ export function harFilesRouter({ prisma, store, maxFileBytes }) {
         }
         const name = safeFileName(req.file.originalname, "network.har");
         const row = await prisma.harFile.create({
-          data: { name, size: req.file.size, summary: JSON.stringify(summary), storageKey: "", createdById: req.auth.user.id },
+          data: {
+            name,
+            size: req.file.size,
+            summary: JSON.stringify(summary),
+            storageKey: "",
+            createdById: req.auth.user.id,
+            projectId: req.params.projectId,
+          },
         });
         const storageKey = `${folderOf(row.id)}/${name}`;
         await store.moveIn(storageKey, req.file.path);
@@ -75,8 +83,12 @@ export function harFilesRouter({ prisma, store, maxFileBytes }) {
 
   router.get(
     "/",
-    asyncHandler(async (_req, res) => {
-      const rows = await prisma.harFile.findMany({ orderBy: { createdAt: "desc" }, include: withCreator });
+    asyncHandler(async (req, res) => {
+      const rows = await prisma.harFile.findMany({
+        where: { projectId: req.params.projectId },
+        orderBy: { createdAt: "desc" },
+        include: withCreator,
+      });
       res.json({ items: rows.map(view), total: rows.length });
     }),
   );
@@ -84,14 +96,14 @@ export function harFilesRouter({ prisma, store, maxFileBytes }) {
   router.get(
     "/:id",
     asyncHandler(async (req, res) => {
-      res.json({ data: view(await findOr404(req.params.id)) });
+      res.json({ data: view(await findOr404(req.params.projectId, req.params.id)) });
     }),
   );
 
   router.get(
     "/:id/file",
     asyncHandler(async (req, res, next) => {
-      const row = await findOr404(req.params.id);
+      const row = await findOr404(req.params.projectId, req.params.id);
       sendStoredFile(res, next, { file: { name: row.name, mimeType: "application/json" }, path: store.resolve(row.storageKey) }, true);
     }),
   );
@@ -99,7 +111,7 @@ export function harFilesRouter({ prisma, store, maxFileBytes }) {
   router.delete(
     "/:id",
     asyncHandler(async (req, res) => {
-      const row = await findOr404(req.params.id);
+      const row = await findOr404(req.params.projectId, req.params.id);
       const user = req.auth.user;
       if (user.role !== "ADMIN" && row.createdById !== user.id) {
         throw new ApiError(403, "FORBIDDEN", "Only the person who saved this HAR file or an admin can delete it");

@@ -1,17 +1,27 @@
-export const IMAGE_TOOL_PATH = "/tools/image-to-test-cases";
-export const PRD_TOOL_PATH = "/tools/prd-to-test-cases";
-export const BUG_REPORT_PATH = "/tools/bug-report";
-export const HAR_READER_PATH = "/tools/har-reader";
+// Every tool works inside one project: /projects/:projectId/tools/<tool>.
+// After signing in, people choose a project first (/projects).
 
-export const bugReportHref = (id) => `${BUG_REPORT_PATH}/${encodeURIComponent(id)}`;
-export const harFileHref = (id) => `${HAR_READER_PATH}/${encodeURIComponent(id)}`;
+export const PROJECTS_PATH = "/projects";
 
-export function imageToolHref(projectId) {
-  return `${IMAGE_TOOL_PATH}?${new URLSearchParams({ project: projectId })}`;
-}
+// Route paths, relative to /projects/:projectId.
+export const TOOL_ROUTES = {
+  image: "tools/image-to-test-cases",
+  prd: "tools/prd-to-test-cases",
+  bugReport: "tools/bug-report",
+  harReader: "tools/har-reader",
+};
+
+export const projectHref = (projectId) => `${PROJECTS_PATH}/${encodeURIComponent(projectId)}`;
+const toolHref = (projectId, tool) => `${projectHref(projectId)}/${TOOL_ROUTES[tool]}`;
+
+export const imageToolHref = (projectId) => toolHref(projectId, "image");
 
 export function prdToolHref(projectId, documentId) {
-  const params = new URLSearchParams({ project: projectId });
-  if (documentId) params.set("document", documentId);
-  return `${PRD_TOOL_PATH}?${params}`;
+  const base = toolHref(projectId, "prd");
+  return documentId ? `${base}?${new URLSearchParams({ document: documentId })}` : base;
 }
+
+export const bugReportsHref = (projectId) => toolHref(projectId, "bugReport");
+export const bugReportHref = (projectId, reportId) => `${bugReportsHref(projectId)}/${encodeURIComponent(reportId)}`;
+export const harReaderHref = (projectId) => toolHref(projectId, "harReader");
+export const harFileHref = (projectId, harId) => `${harReaderHref(projectId)}/${encodeURIComponent(harId)}`;

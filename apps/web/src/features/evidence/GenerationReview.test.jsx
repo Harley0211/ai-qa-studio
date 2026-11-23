@@ -37,7 +37,7 @@ function mockReview(overrides = {}) {
   };
 
   const mock = mockApi({
-    "GET /api/projects": { items: [project({ id: "p1", name: "Alpha" })], total: 1 },
+    "GET /api/projects/p1": project({ id: "p1", name: "Alpha", urls: [], urlCount: 0 }),
     "GET /api/projects/p1/evidence": { items: [], total: 0 },
     [PENDING_URL]: () => pending,
     "GET /api/projects/p1/generations/run1": {
@@ -65,7 +65,7 @@ function mockReview(overrides = {}) {
 }
 
 async function openReview() {
-  renderRoute("/tools/image-to-test-cases?project=p1");
+  renderRoute("/projects/p1/tools/image-to-test-cases");
   return screen.findByRole("region", { name: "Review generated test cases" });
 }
 
@@ -186,7 +186,7 @@ describe("Reviewing generated test cases", () => {
 
   it("shows nothing when no cases are waiting", async () => {
     mockReview({ [PENDING_URL]: { items: [], total: 0 } });
-    renderRoute("/tools/image-to-test-cases?project=p1");
+    renderRoute("/projects/p1/tools/image-to-test-cases");
 
     await screen.findByText("No images uploaded for this project yet.");
     expect(
@@ -377,7 +377,7 @@ describe("Pending review banner", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review now" })).toHaveAttribute(
       "href",
-      "/tools/image-to-test-cases?project=p1",
+      "/projects/p1/tools/image-to-test-cases",
     );
   });
 });

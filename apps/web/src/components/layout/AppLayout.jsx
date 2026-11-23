@@ -1,16 +1,31 @@
-import { Bug, ChevronDown, FileJson, FileText, FlaskConical, FolderKanban, Image, Menu, Sparkles, Users, X } from 'lucide-react';
+import {
+  ArrowLeftRight,
+  Bug,
+  ChevronDown,
+  FileJson,
+  FileText,
+  FlaskConical,
+  FolderKanban,
+  Image,
+  Lock,
+  Menu,
+  Sparkles,
+  Users,
+  X,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, matchPath, useLocation } from 'react-router-dom';
 import { AccountMenu } from '../../features/auth/AccountMenu.jsx';
 import { useCurrentUser } from '../../features/auth/auth.hooks.js';
 import { BackgroundActivity } from '../../features/bug-report/BackgroundActivity.jsx';
+import { useProject } from '../../features/projects/hooks.js';
 import {
-  BUG_REPORT_PATH,
-  HAR_READER_PATH,
-  IMAGE_TOOL_PATH,
-  PRD_TOOL_PATH,
+  PROJECTS_PATH,
+  bugReportsHref,
+  harReaderHref,
   imageToolHref,
   prdToolHref,
+  projectHref,
 } from '../../features/tools/paths.js';
 import { SEASONS, useSeason } from '../../lib/season.js';
 import { useTheme } from '../../lib/theme.js';
@@ -37,46 +52,103 @@ function Brand({ season }) {
   );
 }
 
-const navItems = [{ to: '/projects', label: 'Projects', icon: FolderKanban }];
-
 const navLinkClass = ({ isActive }) =>
   `live-nav-link flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${
     isActive ? 'live-nav-active text-indigo-700' : 'text-slate-600 hover:bg-slate-100'
   }`;
 
-function ToolsNav({ pathname }) {
+const TOOLS = [
+  { key: 'image', label: 'From image evidence', icon: Image, href: imageToolHref, group: 'generate' },
+  { key: 'prd', label: 'From PRD / document', icon: FileText, href: prdToolHref, group: 'generate' },
+  { key: 'bug', label: 'Bug report', icon: Bug, href: bugReportsHref, group: 'qa' },
+  { key: 'har', label: 'HAR reader', icon: FileJson, href: harReaderHref, group: 'qa' },
+];
+
+const SectionLabel = ({ children }) => (
+  <p className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-slate-400">{children}</p>
+);
+
+// The project you're working in, with a way back to the project picker.
+function CurrentProject({ projectId }) {
+  const { data: project } = useProject(projectId);
+  return (
+    <div className="mb-2 rounded-lg border border-slate-200 bg-white/60 px-3 py-2">
+      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Project</p>
+      <NavLink
+        to={projectHref(projectId)}
+        end
+        className="block truncate text-sm font-semibold text-slate-900 hover:text-indigo-700"
+        title={project?.name}
+      >
+        {project?.name ?? 'Loading…'}
+      </NavLink>
+      <NavLink to={PROJECTS_PATH} end className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:underline">
+        <ArrowLeftRight className="h-3 w-3" aria-hidden="true" />
+        Switch project
+      </NavLink>
+    </div>
+  );
+}
+
+// Inside a project: its tools, each opening for this project only.
+function ProjectTools({ projectId }) {
   const [expanded, setExpanded] = useState(true);
-  // Inside a project, open the tool for that project.
-  const projectId = matchPath('/projects/:projectId/*', pathname)?.params.projectId;
-  const imageToolTo = projectId ? imageToolHref(projectId) : IMAGE_TOOL_PATH;
-  const prdToolTo = projectId ? prdToolHref(projectId) : PRD_TOOL_PATH;
+  const link = (tool) => (
+    <NavLink key={tool.key} to={tool.href(projectId)} className={navLinkClass}>
+      <tool.icon className="h-4 w-4" aria-hidden="true" />
+      {tool.label}
+    </NavLink>
+  );
 
   return (
-    <div className="pt-3">
-      <p className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-slate-400">Tools</p>
-      <button
-        type="button"
-        aria-expanded={expanded}
-        aria-controls="tools-nav"
-        onClick={() => setExpanded((value) => !value)}
-        className="live-nav-link flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
-      >
-        <Sparkles className="h-4 w-4" aria-hidden="true" />
-        <span className="flex-1 text-left">Generate test cases</span>
-        <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? '' : '-rotate-90'}`} aria-hidden="true" />
-      </button>
-      {expanded && (
-        <div id="tools-nav" className="mt-1 space-y-1 pl-4">
-          <NavLink to={imageToolTo} className={navLinkClass}>
-            <Image className="h-4 w-4" aria-hidden="true" />
-            From image evidence
-          </NavLink>
-          <NavLink to={prdToolTo} className={navLinkClass}>
-            <FileText className="h-4 w-4" aria-hidden="true" />
-            From PRD / document
-          </NavLink>
-        </div>
-      )}
+    <>
+      <div className="pt-3">
+        <SectionLabel>Tools</SectionLabel>
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls="tools-nav"
+          onClick={() => setExpanded((value) => !value)}
+          className="live-nav-link flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
+        >
+          <Sparkles className="h-4 w-4" aria-hidden="true" />
+          <span className="flex-1 text-left">Generate test cases</span>
+          <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? '' : '-rotate-90'}`} aria-hidden="true" />
+        </button>
+        {expanded && (
+          <div id="tools-nav" className="mt-1 space-y-1 pl-4">
+            {TOOLS.filter((tool) => tool.group === 'generate').map(link)}
+          </div>
+        )}
+      </div>
+      <div className="pt-3">
+        <SectionLabel>QA tools</SectionLabel>
+        {TOOLS.filter((tool) => tool.group === 'qa').map(link)}
+      </div>
+    </>
+  );
+}
+
+// Outside a project the tools can't be used: shown greyed out with a hint.
+function LockedTools() {
+  return (
+    <div className="pt-3" aria-label="Tools (choose a project first)" role="group">
+      <SectionLabel>Tools</SectionLabel>
+      <p className="mx-3 mb-2 flex items-start gap-1.5 rounded-lg bg-amber-50 px-2.5 py-2 text-xs text-amber-900">
+        <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        Choose a project to use the tools.
+      </p>
+      {TOOLS.map((tool) => (
+        <span
+          key={tool.key}
+          aria-disabled="true"
+          title="Choose a project first"
+          className="flex cursor-not-allowed items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-400"
+        >
+          <tool.icon className="h-4 w-4" aria-hidden="true" />
+          {tool.label}
+        </span>
+      ))}
     </div>
   );
 }
@@ -87,6 +159,8 @@ export function AppLayout() {
   const { theme, toggleTheme } = useTheme();
   const seasonState = useSeason();
   const user = useCurrentUser();
+  // The project you're in (none on the project picker or the Users page).
+  const projectId = matchPath(`${PROJECTS_PATH}/:projectId/*`, pathname)?.params.projectId;
   useEffect(() => setOpen(false), [pathname]);
 
   return (
@@ -118,24 +192,20 @@ export function AppLayout() {
           <Clock />
         </div>
         <nav className="relative flex-1 space-y-1 overflow-y-auto px-2 py-2">
-          {navItems.map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} className={navLinkClass}>
-              <Icon className="h-4 w-4" aria-hidden="true" />
-              {label}
-            </NavLink>
-          ))}
-          <ToolsNav pathname={pathname} />
-          <div className="pt-3">
-            <p className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-slate-400">QA tools</p>
-            <NavLink to={BUG_REPORT_PATH} className={navLinkClass}>
-              <Bug className="h-4 w-4" aria-hidden="true" />
-              Bug report
-            </NavLink>
-            <NavLink to={HAR_READER_PATH} className={navLinkClass}>
-              <FileJson className="h-4 w-4" aria-hidden="true" />
-              HAR reader
-            </NavLink>
-          </div>
+          {projectId ? (
+            <>
+              <CurrentProject projectId={projectId} />
+              <ProjectTools projectId={projectId} />
+            </>
+          ) : (
+            <>
+              <NavLink to={PROJECTS_PATH} className={navLinkClass}>
+                <FolderKanban className="h-4 w-4" aria-hidden="true" />
+                Projects
+              </NavLink>
+              <LockedTools />
+            </>
+          )}
           {user?.role === 'ADMIN' && (
             <div className="pt-3">
               <p className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-slate-400">Admin</p>

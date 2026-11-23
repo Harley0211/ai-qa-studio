@@ -1,6 +1,6 @@
 import { Bug, Download, FileJson, Folder, Trash2, Upload } from "lucide-react";
 import { useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useOutletContext } from "react-router-dom";
 import { PageHeader } from "../../components/layout/PageHeader.jsx";
 import { Button } from "../../components/ui/Button.jsx";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog.jsx";
@@ -10,7 +10,8 @@ import { downloadBlob } from "../../lib/zip.js";
 import { useCurrentUser } from "../auth/auth.hooks.js";
 import { MAX_SAVED_FILE_BYTES } from "../bug-report/attachments.js";
 import { useDeleteHarFile, useHarFiles, useSaveHarFile } from "../bug-report/hooks.js";
-import { BUG_REPORT_PATH, harFileHref } from "../tools/paths.js";
+import { bugReportsHref, harFileHref } from "../tools/paths.js";
+import { ToolCrumb } from "../tools/ToolCrumb.jsx";
 import { HarEntryDetail, HarErrors, HarSummary, HarTable } from "./HarViews.jsx";
 import { HarExplanation } from "./HarExplanation.jsx";
 import { harReportMarkdown } from "./harExplainer.js";
@@ -70,7 +71,7 @@ export function HarDropzone({ onFile, busy, label = "Drop a HAR file here" }) {
 }
 
 // Everything the reader shows for one parsed HAR.
-export function HarResult({ fileName, parsed, actions }) {
+export function HarResult({ projectId, fileName, parsed, actions }) {
   const navigate = useNavigate();
   const toast = useToast();
   const [selected, setSelected] = useState(parsed.summary.errors[0] ?? null);
@@ -87,7 +88,7 @@ export function HarResult({ fileName, parsed, actions }) {
 
   function createBugReport() {
     const file = new File([JSON.stringify(parsed.har)], fileName, { type: "application/json" });
-    navigate(BUG_REPORT_PATH, { state: { harFile: file } });
+    navigate(bugReportsHref(projectId), { state: { harFile: file } });
   }
 
   return (
@@ -136,11 +137,11 @@ export function librarySummary(summary) {
   };
 }
 
-function HarLibrary() {
+function HarLibrary({ projectId }) {
   const toast = useToast();
   const user = useCurrentUser();
-  const { data, isPending, isError, error, refetch } = useHarFiles();
-  const remove = useDeleteHarFile();
+  const { data, isPending, isError, error, refetch } = useHarFiles(projectId);
+  const remove = useDeleteHarFile(projectId);
   const [deleting, setDeleting] = useState(null);
   const items = data?.items ?? [];
 
@@ -172,7 +173,7 @@ function HarLibrary() {
               <li key={item.id} className="flex gap-3 rounded-xl border border-slate-200 bg-white p-4">
                 <Folder className="mt-0.5 h-5 w-5 shrink-0 text-indigo-500" aria-hidden="true" />
                 <div className="min-w-0 flex-1">
-                  <Link to={harFileHref(item.id)} className="block truncate text-sm font-semibold text-slate-900 hover:text-indigo-700">
+                  <Link to={harFileHref(projectId, item.id)} className="block truncate text-sm font-semibold text-slate-900 hover:text-indigo-700">
                     {item.name}
                   </Link>
                   <p className="mt-1 text-xs text-slate-500">
@@ -226,9 +227,10 @@ function HarLibrary() {
 }
 
 export default function HarReaderPage() {
+  const { project } = useOutletContext();
   const navigate = useNavigate();
   const toast = useToast();
-  const save = useSaveHarFile();
+  const save = useSaveHarFile(project.id);
   const [local, setLocal] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -248,7 +250,7 @@ export default function HarReaderPage() {
         const saved = await save.mutateAsync({ blob: redacted, name: file.name, summary: librarySummary(parsed.summary) });
         openedHars.set(saved.data.id, { fileName: file.name, parsed });
         toast.success("Saved to the HAR library.");
-        navigate(harFileHref(saved.data.id));
+        navigate(harFileHref(project.id, saved.data.id));
       } catch (err) {
         setLocal({ fileName: file.name, parsed });
         toast.error(`Showing the file, but it couldn't be saved: ${err.message}`);
@@ -262,14 +264,15 @@ export default function HarReaderPage() {
 
   return (
     <>
-      <p className="mb-2 text-sm text-slate-500">Tools / HAR reader</p>
+      <ToolCrumb project={project} tool="HAR reader" />
       <PageHeader
         title="HAR reader"
-        description="See every request in a HAR file: status codes, errors, slow calls, headers and responses. Each file is kept in the HAR library."
+        description={`See every request in a HAR file: status codes, errors, slow calls, headers and responses. Each file is kept in ${project.name}'s HAR library.`}
       />
       <div className="space-y-6">
         {local ? (
           <HarResult
+            projectId={project.id}
             fileName={local.fileName}
             parsed={local.parsed}
             actions={
@@ -286,7 +289,7 @@ export default function HarReaderPage() {
             {error}
           </p>
         )}
-        <HarLibrary />
+        <HarLibrary projectId={project.id} />
       </div>
     </>
   );

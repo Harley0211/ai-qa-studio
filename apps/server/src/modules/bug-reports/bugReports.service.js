@@ -185,8 +185,9 @@ function listView(row) {
 export function createBugReportService({ prisma, store, ollama }) {
   const running = new Map();
 
-  async function findOr404(id) {
-    const row = await prisma.bugReport.findUnique({ where: { id }, include: { files: { orderBy: { createdAt: "asc" } } } });
+  // A report only exists inside its own project.
+  async function findOr404(projectId, id) {
+    const row = await prisma.bugReport.findFirst({ where: { id, projectId } });
     if (!row) throw new ApiError(404, "NOT_FOUND", "Bug report not found");
     return row;
   }
@@ -260,11 +261,11 @@ export function createBugReportService({ prisma, store, ollama }) {
 
     // images: [{ buffer, name, kind: "image" | "frame", mimeType }], in the
     // order the AI sees them.
-    async create(user, input, images) {
+    async create(user, projectId, input, images) {
       await assertNoRunningReport(user.id);
 
       const row = await prisma.bugReport.create({
-        data: { input: JSON.stringify(input), createdById: user.id },
+        data: { input: JSON.stringify(input), createdById: user.id, projectId },
       });
 
       try {
@@ -296,8 +297,8 @@ export function createBugReportService({ prisma, store, ollama }) {
 
     // Adds a file to a report's folder (videos, HAR copies, HAR summaries,
     // screenshots beyond what the AI looks at).
-    async addFile(user, id, upload, kind) {
-      const row = await findOr404(id);
+    async addFile(user, projectId, id, upload, kind) {
+      const row = await findOr404(projectId, id);
       assertCanChange(user, row);
       const mimeType = await storedType(upload, kind);
       const name = safeFileName(upload.originalname, `${kind}-file`);
@@ -310,14 +311,14 @@ export function createBugReportService({ prisma, store, ollama }) {
       return fileView(file);
     },
 
-    async list() {
-      const rows = await prisma.bugReport.findMany({ orderBy: { createdAt: "desc" }, select: listSelect });
+    async list(projectId) {
+      const rows = await prisma.bugReport.findMany({ where: { projectId }, orderBy: { createdAt: "desc" }, select: listSelect });
       return { items: rows.map(listView), total: rows.length };
     },
 
-    async get(id) {
-      const row = await prisma.bugReport.findUnique({
-        where: { id },
+    async get(projectId, id) {
+      const row = await prisma.bugReport.findFirst({
+        where: { id, projectId },
         include: { files: { orderBy: [{ aiOrder: "asc" }, { createdAt: "asc" }] }, createdBy: { select: { id: true, name: true } } },
       });
       if (!row) throw new ApiError(404, "NOT_FOUND", "Bug report not found");
@@ -339,8 +340,8 @@ export function createBugReportService({ prisma, store, ollama }) {
     },
 
     // Saves the title, severity and edited Jira/Slack texts.
-    async update(user, id, changes) {
-      const row = await findOr404(id);
+    async update(user, projectId, id, changes) {
+      const row = await findOr404(projectId, id);
       assertCanChange(user, row);
       const report = parseJson(row.report);
       if (row.status !== "SUCCEEDED" || !report) {
@@ -360,11 +361,11 @@ export function createBugReportService({ prisma, store, ollama }) {
           ...(changes.texts !== undefined ? { texts: changes.texts ? JSON.stringify(changes.texts) : null } : {}),
         },
       });
-      return this.get(id);
+      return this.get(projectId, id);
     },
 
-    async retry(user, id) {
-      const row = await findOr404(id);
+    async retry(user, projectId, id) {
+      const row = await findOr404(projectId, id);
       assertCanChange(user, row);
       if (row.status !== "FAILED") throw new ApiError(409, "NOT_FAILED", "Only a failed bug report can be retried");
       await assertNoRunningReport(user.id);
@@ -377,17 +378,23 @@ export function createBugReportService({ prisma, store, ollama }) {
     },
 
     // Deletes the report and its whole folder of files.
-    async remove(user, id) {
-      const row = await findOr404(id);
+    async remove(user, projectId, id) {
+      const row = await findOr404(projectId, id);
       assertCanChange(user, row);
       await prisma.bugReport.delete({ where: { id } });
       await store.removeFolder(folderOf(id));
     },
 
-    async file(id, fileId) {
-      const file = await prisma.bugReportFile.findFirst({ where: { id: fileId, bugReportId: id } });
+    async file(projectId, id, fileId) {
+      const file = await prisma.bugReportFile.findFirst({ where: { id: fileId, bugReportId: id, bugReport: { projectId } } });
       if (!file) throw new ApiError(404, "NOT_FOUND", "File not found");
       return { file, path: store.resolve(file.storageKey) };
+    },
+
+    // Folders to delete from storage when a project is deleted.
+    async foldersOfProject(projectId) {
+      const rows = await prisma.bugReport.findMany({ where: { projectId }, select: { id: true } });
+      return rows.map((row) => folderOf(row.id));
     },
 
     // For tests: wait for a report's AI call to finish.
