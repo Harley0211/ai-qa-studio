@@ -5,7 +5,7 @@ requirements documents (PRDs) into test cases with a local AI model, lets you
 review and refine them before they are saved, and then manage, run and export
 them per project. Team members sign in; everyone works on all projects.
 
-**Status (23 Nov 2026):** 381 automated tests pass (229 server, 152 web) and the
+**Status (23 Nov 2026):** 396 automated tests pass (229 server, 167 web) and the
 production build succeeds.
 
 ---
@@ -159,6 +159,23 @@ as HAR*) in the browser:
 
 - Totals (requests, failed, duration, data transferred) and the status code
   mix (2xx, 3xx, 4xx, 5xx, no response).
+- **What happened**: a plain-language explanation for testers new to network
+  logs, whether or not anything failed:
+  - a verdict ("3 requests failed. The main problem: POST /api/orders → 500
+    Internal Server Error." or "All 132 requests succeeded…");
+  - each problem (repeats grouped, most important first): what happened, what
+    the status code means, the likely cause, **who should look** (backend,
+    frontend, sign-in/permissions, network, or a third party) and what to
+    check next. Ad-blocked, cancelled and third-party requests are marked
+    *probably not a bug*;
+  - what else the file shows (redirects, slow calls, large downloads) and next
+    steps (with no failures: check the browser console, the recording covers
+    the moment of the bug);
+  - **How to explain this to your lead**: a ready paragraph with a Copy
+    button.
+  It is rule-based (no AI), so it is instant and only states what is in the
+  file. It is also added to the downloaded summary and to the HAR summary in
+  bug report folders.
 - **Failed requests**, most serious first (5xx, then no response, then 4xx),
   with the error message the server sent back.
 - Every request in a table: filter by status or type, search the URL, with a
@@ -665,7 +682,7 @@ the filtered list.
 | Suite | Files | Tests |
 |---|---:|---:|
 | Server (`apps/server/tests`) | 16 | 229 |
-| Web (`apps/web/src/**/*.test.*`) | 17 | 152 |
+| Web (`apps/web/src/**/*.test.*`) | 18 | 167 |
 
 Server tests run against a separate SQLite database (`test.db`) that is rebuilt
 on every run; n8n is mocked. Web tests mock the API with `mockApi` from

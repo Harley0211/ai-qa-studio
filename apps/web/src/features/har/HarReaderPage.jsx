@@ -12,7 +12,9 @@ import { MAX_SAVED_FILE_BYTES } from "../bug-report/attachments.js";
 import { useDeleteHarFile, useHarFiles, useSaveHarFile } from "../bug-report/hooks.js";
 import { BUG_REPORT_PATH, harFileHref } from "../tools/paths.js";
 import { HarEntryDetail, HarErrors, HarSummary, HarTable } from "./HarViews.jsx";
-import { formatBytes, formatMs, harSummaryMarkdown, readHarFile, redactHar } from "./harParser.js";
+import { HarExplanation } from "./HarExplanation.jsx";
+import { harReportMarkdown } from "./harExplainer.js";
+import { formatBytes, formatMs, readHarFile, redactHar } from "./harParser.js";
 
 // Parsed HARs this browser just opened, so opening the saved copy right after
 // doesn't download and parse it again.
@@ -75,7 +77,7 @@ export function HarResult({ fileName, parsed, actions }) {
   const base = fileName.replace(/\.har$/i, "");
 
   function downloadSummary() {
-    downloadBlob(new Blob([harSummaryMarkdown(fileName, parsed.summary)], { type: "text/markdown" }), `${base}-summary.md`);
+    downloadBlob(new Blob([harReportMarkdown(fileName, parsed)], { type: "text/markdown" }), `${base}-summary.md`);
   }
 
   function downloadRedacted() {
@@ -109,6 +111,7 @@ export function HarResult({ fileName, parsed, actions }) {
         </div>
       </div>
       <HarSummary summary={parsed.summary} />
+      <HarExplanation summary={parsed.summary} entries={parsed.entries} onSelect={setSelected} />
       <HarErrors summary={parsed.summary} onSelect={setSelected} />
       {selected && <HarEntryDetail key={selected.id} entry={selected} onClose={() => setSelected(null)} />}
       <HarTable entries={parsed.entries} selectedId={selected?.id} onSelect={setSelected} />

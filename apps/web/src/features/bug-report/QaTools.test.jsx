@@ -310,6 +310,15 @@ describe("HAR reader", () => {
     expect(await screen.findByRole("heading", { name: "session.har" })).toBeInTheDocument();
     const summary = await screen.findByRole("region", { name: "HAR summary" });
     expect(within(summary).getByText("5xx: 1")).toBeInTheDocument();
+
+    // The plain-language explanation, with a paragraph for the lead.
+    const explained = screen.getByRole("region", { name: "What happened" });
+    expect(within(explained).getByText(/The main problem: POST \/api\/orders → 500 Internal Server Error/)).toBeInTheDocument();
+    expect(within(explained).getByText("3 problems, most important first")).toBeInTheDocument();
+    expect(within(explained).getAllByText("Backend / API team").length).toBeGreaterThan(0);
+    await user.click(within(explained).getByRole("button", { name: "Copy" }));
+    expect(await navigator.clipboard.readText()).toContain("I recorded the network traffic (HAR)");
+
     const failed = screen.getByRole("region", { name: "Failed requests" });
     expect(within(failed).getByText("“Payment gateway timeout”")).toBeInTheDocument();
 

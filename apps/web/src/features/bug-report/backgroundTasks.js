@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { api } from "../../lib/apiClient.js";
-import { harFactsForAi, harSummaryMarkdown, redactHar, redactUrl } from "../har/harParser.js";
+import { harReportMarkdown } from "../har/harExplainer.js";
+import { harFactsForAi, redactHar, redactUrl } from "../har/harParser.js";
 import { MAX_AI_IMAGES, frameName, framePlan } from "./attachments.js";
 import { extractFrames, formatTimestamp } from "./videoFrames.js";
 
@@ -158,7 +159,7 @@ export function startBugReportTask({ form, environment, attachments, onReportCre
         const base = item.file.name.replace(/\.har$/i, "");
         return [
           ["har", new Blob([JSON.stringify(redactHar(item.har.har))], { type: "application/json" }), `${base}-redacted.har`],
-          ["har-summary", new Blob([harSummaryMarkdown(item.file.name, item.har.summary)], { type: "text/markdown" }), `${base}-summary.md`],
+          ["har-summary", new Blob([harReportMarkdown(item.file.name, item.har)], { type: "text/markdown" }), `${base}-summary.md`],
         ];
       }),
     ];
