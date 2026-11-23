@@ -5,7 +5,7 @@ requirements documents (PRDs) into test cases with a local AI model, lets you
 review and refine them before they are saved, and then manage, run and export
 them per project. Team members sign in; everyone works on all projects.
 
-**Status (23 Nov 2026):** 319 automated tests pass (209 server, 110 web) and the
+**Status (23 Nov 2026):** 333 automated tests pass (209 server, 124 web) and the
 production build succeeds.
 
 ---
@@ -117,6 +117,16 @@ The project's **Test cases** tab:
 ### Other
 - **Dark mode:** toggle in the sidebar (or the top bar on small screens). The
   choice is remembered; until then the app follows the operating system.
+- **Seasonal live look:** the page background slowly moves (drifting color
+  glows plus petals in spring, glowing motes in summer, falling leaves in
+  autumn, snow in winter) and the sidebar has a glowing, animated look. The
+  season follows the date (Mar–May spring, Jun–Aug summer, Sep–Nov autumn,
+  Dec–Feb winter); the **Season theme** picker at the bottom of the sidebar
+  can choose another one. The ✨ button turns animations off; they start off
+  for people whose system asks for reduced motion, and pause while the tab is
+  hidden.
+- **Clock:** a small live clock (time, seconds, date) at the top of the
+  sidebar, and a compact one in the top bar on small screens.
 - **Failed runs never hang:** if n8n fails it reports the error and the run is
   marked failed within seconds. If n8n never answers, the run is marked failed
   after 30 minutes.
@@ -559,7 +569,7 @@ the filtered list.
 | Suite | Files | Tests |
 |---|---:|---:|
 | Server (`apps/server/tests`) | 14 | 209 |
-| Web (`apps/web/src/**/*.test.*`) | 14 | 110 |
+| Web (`apps/web/src/**/*.test.*`) | 15 | 124 |
 
 Server tests run against a separate SQLite database (`test.db`) that is rebuilt
 on every run; n8n is mocked. Web tests mock the API with `mockApi` from

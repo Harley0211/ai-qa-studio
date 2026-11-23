@@ -75,3 +75,249 @@ body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
 .dark .text-amber-600,
 .dark .text-amber-700,
 .dark .text-amber-800 { color: #fcd34d; }
+
+/*
+ * Seasonal "live" look (see src/lib/season.js, LiveBackground.jsx).
+ * <html data-season="spring|summer|autumn|winter"> picks the colors below;
+ * <html data-motion="on|off"> turns the animations on or off. Content cards
+ * keep their solid surfaces, so text stays as readable as before.
+ */
+:root,
+:root[data-season="autumn"] {
+  --s-bg-from: #fff7ed;
+  --s-bg-to: #fef2f2;
+  --s-blob-1: #fdba74;
+  --s-blob-2: #fca5a5;
+  --s-blob-3: #fcd34d;
+  --s-accent-a: #ea580c;
+  --s-accent-b: #db2777;
+}
+:root[data-season="spring"] {
+  --s-bg-from: #fdf2f8;
+  --s-bg-to: #f0fdf4;
+  --s-blob-1: #f9a8d4;
+  --s-blob-2: #86efac;
+  --s-blob-3: #c4b5fd;
+  --s-accent-a: #db2777;
+  --s-accent-b: #16a34a;
+}
+:root[data-season="summer"] {
+  --s-bg-from: #fefce8;
+  --s-bg-to: #ecfeff;
+  --s-blob-1: #fde047;
+  --s-blob-2: #67e8f9;
+  --s-blob-3: #fdba74;
+  --s-accent-a: #f59e0b;
+  --s-accent-b: #0891b2;
+}
+:root[data-season="winter"] {
+  --s-bg-from: #f0f9ff;
+  --s-bg-to: #eef2ff;
+  --s-blob-1: #bae6fd;
+  --s-blob-2: #c7d2fe;
+  --s-blob-3: #a5f3fc;
+  --s-accent-a: #2563eb;
+  --s-accent-b: #7c3aed;
+}
+
+/* Dark mode: deep, season-tinted night colors. */
+.dark,
+.dark[data-season="autumn"] {
+  --s-bg-from: #1c1008;
+  --s-bg-to: #1a0b12;
+  --s-blob-1: #9a3412;
+  --s-blob-2: #9f1239;
+  --s-blob-3: #a16207;
+  --s-accent-a: #fb923c;
+  --s-accent-b: #f472b6;
+}
+.dark[data-season="spring"] {
+  --s-bg-from: #1a0a14;
+  --s-bg-to: #06170e;
+  --s-blob-1: #9d174d;
+  --s-blob-2: #166534;
+  --s-blob-3: #5b21b6;
+  --s-accent-a: #f472b6;
+  --s-accent-b: #4ade80;
+}
+.dark[data-season="summer"] {
+  --s-bg-from: #161204;
+  --s-bg-to: #041619;
+  --s-blob-1: #a16207;
+  --s-blob-2: #0e7490;
+  --s-blob-3: #c2410c;
+  --s-accent-a: #fbbf24;
+  --s-accent-b: #22d3ee;
+}
+.dark[data-season="winter"] {
+  --s-bg-from: #030b1a;
+  --s-bg-to: #0b0a24;
+  --s-blob-1: #1e40af;
+  --s-blob-2: #4338ca;
+  --s-blob-3: #0e7490;
+  --s-accent-a: #60a5fa;
+  --s-accent-b: #a78bfa;
+}
+
+/* Page backdrop */
+.live-app {
+  background: linear-gradient(135deg, var(--s-bg-from), var(--s-bg-to));
+  transition: background 0.8s ease;
+}
+.live-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.live-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(70px);
+  opacity: 0.45;
+  will-change: transform;
+}
+.dark .live-blob { opacity: 0.35; }
+.live-blob-1 { width: 42vw; height: 42vw; top: -12vw; left: 8vw; background: var(--s-blob-1); }
+.live-blob-2 { width: 36vw; height: 36vw; bottom: -10vw; right: -6vw; background: var(--s-blob-2); }
+.live-blob-3 { width: 28vw; height: 28vw; top: 38%; left: 45%; background: var(--s-blob-3); }
+.live-particles { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+@keyframes live-drift-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(8vw, 6vh) scale(1.12); }
+}
+@keyframes live-drift-2 {
+  0%, 100% { transform: translate(0, 0) scale(1.05); }
+  50% { transform: translate(-10vw, -8vh) scale(0.92); }
+}
+@keyframes live-drift-3 {
+  0%, 100% { transform: translate(0, 0) scale(0.95); }
+  33% { transform: translate(-12vw, 6vh) scale(1.1); }
+  66% { transform: translate(6vw, -10vh) scale(1); }
+}
+[data-motion="on"] .live-blob-1 { animation: live-drift-1 22s ease-in-out infinite; }
+[data-motion="on"] .live-blob-2 { animation: live-drift-2 28s ease-in-out infinite; }
+[data-motion="on"] .live-blob-3 { animation: live-drift-3 34s ease-in-out infinite; }
+
+/* Frosted bars over the moving backdrop */
+.live-glass {
+  background: rgb(255 255 255 / 0.75);
+  backdrop-filter: blur(14px);
+}
+.dark .live-glass { background: rgb(15 23 42 / 0.75); }
+
+/* Sidebar: frosted glass with a slow aurora glow and a shimmering edge */
+.live-sidebar {
+  background: rgb(255 255 255 / 0.78);
+  backdrop-filter: blur(16px);
+  overflow: hidden;
+}
+.dark .live-sidebar { background: rgb(15 23 42 / 0.8); }
+.live-sidebar::before {
+  content: "";
+  position: absolute;
+  inset: -40% -60% auto -60%;
+  height: 340px;
+  background: conic-gradient(from 0deg, var(--s-blob-1), var(--s-blob-2), var(--s-blob-3), var(--s-blob-1));
+  filter: blur(48px);
+  opacity: 0.45;
+  pointer-events: none;
+}
+.live-sidebar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 2px;
+  height: 100%;
+  background: linear-gradient(180deg, transparent, var(--s-accent-a), var(--s-accent-b), transparent);
+  background-size: 100% 200%;
+  opacity: 0.7;
+  pointer-events: none;
+}
+@keyframes live-spin { to { transform: rotate(360deg); } }
+@keyframes live-flow { from { background-position: 0 0; } to { background-position: 0 200%; } }
+[data-motion="on"] .live-sidebar::before { animation: live-spin 18s linear infinite; }
+[data-motion="on"] .live-sidebar::after { animation: live-flow 6s linear infinite; }
+
+/* Brand */
+.live-brand-icon {
+  background: linear-gradient(135deg, var(--s-accent-a), var(--s-accent-b));
+  box-shadow: 0 4px 14px -4px var(--s-accent-a);
+}
+.live-brand-text {
+  background: linear-gradient(90deg, var(--s-accent-a), var(--s-accent-b), var(--s-accent-a));
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.live-season-badge { font-size: 0.95rem; line-height: 1; }
+@keyframes live-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-3px) rotate(-6deg); }
+}
+@keyframes live-text-shine { to { background-position: -200% 0; } }
+@keyframes live-sway {
+  0%, 100% { transform: rotate(-10deg); }
+  50% { transform: rotate(10deg); }
+}
+[data-motion="on"] .live-brand-icon { animation: live-float 4s ease-in-out infinite; }
+[data-motion="on"] .live-brand-text { animation: live-text-shine 8s linear infinite; }
+[data-motion="on"] .live-season-badge { display: inline-block; animation: live-sway 3s ease-in-out infinite; }
+
+/* Navigation: slide on hover, glowing active item with an accent bar */
+.live-nav-link {
+  position: relative;
+  transition: transform 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+.live-nav-link:hover { transform: translateX(3px); }
+.live-nav-active {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--s-accent-a) 16%, transparent), color-mix(in srgb, var(--s-accent-b) 8%, transparent));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s-accent-a) 25%, transparent);
+}
+.live-nav-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 18%;
+  bottom: 18%;
+  width: 3px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, var(--s-accent-a), var(--s-accent-b));
+}
+@keyframes live-pulse-bar {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+[data-motion="on"] .live-nav-active::before { animation: live-pulse-bar 2.4s ease-in-out infinite; }
+
+/* Clock */
+.live-clock {
+  background: rgb(255 255 255 / 0.6);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s-accent-a) 20%, transparent);
+}
+.dark .live-clock { background: rgb(2 6 23 / 0.45); }
+.live-clock-time {
+  background: linear-gradient(90deg, var(--s-accent-a), var(--s-accent-b));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.live-clock-bar {
+  background: linear-gradient(90deg, var(--s-accent-a), var(--s-accent-b));
+  transition: width 0.9s linear;
+}
+@keyframes live-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+[data-motion="on"] .live-colon { animation: live-blink 1s steps(1, end) infinite; }
+
+/* People who ask their system for less motion get a still page. */
+@media (prefers-reduced-motion: reduce) {
+  .live-nav-link:hover { transform: none; }
+  .live-clock-bar { transition: none; }
+}
