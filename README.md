@@ -12,21 +12,31 @@ production build succeeds.
 
 ## 1. Features
 
-### Projects
-- Each project keeps its own application URLs, evidence images, documents and
-  test cases.
-- The **Projects** page shows totals (projects, test cases, URLs) and, per
-  project, its URL, test case and image counts plus an **Image â†’ test cases**
-  shortcut.
+### Projects (choose a project first)
+- **After signing in, everyone starts on _Choose a project_.** Every tool
+  (test case generation from images or PRDs, bug reports, HAR reader) works
+  inside one project and only shows that project's data: on *PNCC* you never
+  see *Fiber*'s bug reports or HAR files. Addresses look like
+  `/projects/<id>/tools/bug-report`.
+- On the picker the sidebar's tools are locked (greyed out, "Choose a project
+  to use the tools"). Inside a project the sidebar shows the project's name, a
+  **Switch project** link, and the tools for that project.
+- Every signed-in user can open any project. **Only admins create, rename or
+  delete projects** (members don't see those buttons, and the server refuses
+  them). Deleting a project also deletes its bug report and HAR folders.
+- Each project keeps its own application URLs, evidence images, documents,
+  test cases, bug reports and HAR files.
+- The picker shows totals (projects, test cases, URLs) and, per project, its
+  URL, test case and image counts.
 - A project's **Overview** has three *Start generating* cards (from images, from
   a PRD, or write manually) and an execution summary.
 
 ### Generate test cases from screenshots
-**Tools â†’ From image evidence** (or *Open tool* on the Overview):
+**Tools → From image evidence** (or *Open tool* on the Overview):
 
 1. Upload PNG, JPG or WEBP screenshots (up to 5 MB each).
 2. Tick the images to generate from (up to 20). Each image is marked **New** or
-   **Used Â· date**. New images are selected for you and used ones are not, so
+   **Used · date**. New images are selected for you and used ones are not, so
    in a project that already has evidence and test cases you just upload the
    new screens and generate: nothing has to be cleared first. *Select new
    only*, *Select all* and *Clear selection* change the selection quickly.
@@ -48,7 +58,7 @@ the workflow drops any scenario that still matches one. If everything in the
 selected images is already covered, the run fails with a message saying so.
 
 ### Generate test cases from a PRD or document
-**Tools â†’ From PRD / document**, or the project's **Documents** tab:
+**Tools → From PRD / document**, or the project's **Documents** tab:
 
 1. Add a document: paste text, or upload a **.txt, .md or .pdf** file (up to
    10 MB; PDFs need selectable text).
@@ -57,7 +67,7 @@ selected images is already covered, the run fails with a message saying so.
    Numbered steps such as `1. Click Login` stay inside their section.
 3. Select up to 10 sections, a focus and a result format, then generate.
 4. Each section is generated separately, so every test case is linked to the
-   section it came from (shown as *From Add-ons PRD â€º 3.2 Purchase flow*).
+   section it came from (shown as *From Add-ons PRD › 3.2 Purchase flow*).
 
 ### Review before saving
 Generated test cases are **drafts**. Nothing reaches the library until it is
@@ -69,7 +79,7 @@ reviewed:
 - A draft whose title matches a test case already in the library is labelled
   **Possible duplicate of TC-0012** and starts unselected. Tick it to keep it
   anyway.
-- Test case IDs (`TC-0001`, â€¦) are assigned only when cases are accepted, so
+- Test case IDs (`TC-0001`, …) are assigned only when cases are accepted, so
   discarded drafts leave no gaps.
 - The Evidence and Test cases tabs show a banner while batches are waiting.
 
@@ -86,7 +96,7 @@ the batch's drafts are updated in place:
 - Each reply says what changed ("Added 2 test cases", "Removed #7") plus the
   model's own short summary. Earlier requests are sent along as context.
 - One change at a time per batch; adding to the library is paused while a
-  change runs. Typical changes take 5â€“40 seconds on the local model.
+  change runs. Typical changes take 5–40 seconds on the local model.
 - Refining uses the cases' text only, not the original screenshots.
 
 ### Test case library
@@ -241,10 +251,10 @@ refuses uploads over 100 MB.
 How a generation run works:
 
 ```text
-Web app â”€â”€POST /generationsâ”€â”€â–¶ Server â”€â”€webhookâ”€â”€â–¶ n8n â”€â”€â–¶ Ollama
-                                  â–²                  â”‚
-                                  â”‚  POST /callback (test cases)  â”€â”
-                                  â””â”€â”€POST /failure  (error)    â—€â”€â”€â”˜
+Web app ──POST /generations──▶ Server ──webhook──▶ n8n ──▶ Ollama
+                                  ▲                  │
+                                  │  POST /callback (test cases)  ─┐
+                                  └──POST /failure  (error)    ◀──┘
 ```
 
 - The server creates a run (`PENDING`) with a one-time callback token and calls
@@ -485,11 +495,11 @@ About 2 GB. Ollama then runs in the background (tray icon) and answers on
 
 1. Start n8n: `n8n start`, then open http://localhost:5678 (create the n8n
    owner account the first time).
-2. **Workflows â†’ Import from File** â†’ choose
+2. **Workflows → Import from File** → choose
    `n8n\ai-qa-studio-generation.workflow.json`. If an older "AI QA Studio"
    workflow exists, delete or deactivate it first, because both use the same
    webhook address.
-3. Open the **Webhook** node â†’ *Credential* â†’ create **Header Auth**:
+3. Open the **Webhook** node → *Credential* → create **Header Auth**:
    - Name: `X-AQS-Request-Secret`
    - Value: the same value as `N8N_REQUEST_SECRET` in step 4
 4. Save, then **Activate/Publish** the workflow (toggle in the top bar).
@@ -507,14 +517,14 @@ npm run dev:server
 
 Open **http://127.0.0.1:4000**. It should show the AI QA Studio page.
 (Alternatively open the folder in VS Code and run the tasks **n8n** and
-**Server** from *Terminal â†’ Run Task*.)
+**Server** from *Terminal → Run Task*.)
 
 **8. Create the admin account BEFORE going public**
 
 On a computer that has never been used with sign-in, the page asks you to
 **Create the admin account**. Do it now, locally. The first person to open a
 fresh install becomes admin, so this must not be left for a stranger.
-Then use **Users** (sidebar â†’ Admin) to add your teammates.
+Then use **Users** (sidebar → Admin) to add your teammates.
 
 **9. Start the public link**
 
@@ -646,11 +656,11 @@ the filtered list.
   show a Step / Action / Expected result table and flag missing results;
   per-step cases can be edited without an overall expected result.
 - **Dark mode** toggle.
-- **Phase 1 (navigation and tools):** sidebar *Tools* section; Image â†’ Test cases
+- **Phase 1 (navigation and tools):** sidebar *Tools* section; Image → Test cases
   page with format cards and focus options; Projects page counts and shortcuts;
   Overview *Start generating* cards and execution summary.
 - **Phase 2 (review before saving):** generated cases are drafts until accepted.
-- **Phase 3 (documents and PRDs):** Documents tab, PRD â†’ Test cases tool, section
+- **Phase 3 (documents and PRDs):** Documents tab, PRD → Test cases tool, section
   splitting, PDF upload, links from test cases back to their section.
 - **Reliability:** n8n reports failures to the app; expired runs are closed; the
   n8n parser skips malformed cases, drops repeated titles and recovers results
@@ -661,7 +671,7 @@ the filtered list.
   "file too large" message.
 - **Database migrations:** `add_generation_drafts`, `add_documents`.
 - **Phase 4 (AI chat):** *Refine with AI* on every review batch; n8n REFINE
-  branch (plan â†’ targeted rewrite â†’ apply); migration `add_refinements`.
+  branch (plan → targeted rewrite → apply); migration `add_refinements`.
 - **Evidence-sized generation:** the number of generated cases follows the
   evidence (scenario list first, then exactly that many cases) instead of a
   fixed ~11.
