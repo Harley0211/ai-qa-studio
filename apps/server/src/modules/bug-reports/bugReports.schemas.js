@@ -32,7 +32,46 @@ export const bugReportInputSchema = z.object({
     .max(40)
     .optional()
     .default([]),
+  // One per uploaded image, in order: a screenshot or a frame from a video.
+  imageKinds: z.array(z.enum(["image", "frame"])).max(MAX_BUG_REPORT_IMAGES).optional().default([]),
+  // The HAR's failed requests (already redacted by the browser), so the Jira
+  // and Slack texts can show them whenever the report is opened.
+  harErrors: z
+    .array(
+      z.object({
+        file: z.string().max(255).optional().default(""),
+        entry: z.object({
+          method: z.string().max(20),
+          url: z.string().max(2000),
+          status: z.number().int().min(0).max(999),
+          statusText: z.string().max(200).optional().default(""),
+          networkError: z.string().max(300).optional().default(""),
+          time: z.number().min(0).max(1e9),
+          errorMessage: z.string().max(400).nullable().optional().default(null),
+        }),
+      }),
+    )
+    .max(100)
+    .optional()
+    .default([]),
 });
+
+export const BUG_REPORT_FILE_KINDS = ["image", "video", "har", "har-summary"];
+
+export const bugReportUpdateSchema = z
+  .object({
+    title: z.string().trim().min(1).max(150).optional(),
+    severity: z.enum(SEVERITIES).optional(),
+    texts: z
+      .object({
+        jiraMarkdown: z.string().max(100_000),
+        jiraWiki: z.string().max(100_000),
+        slack: z.string().max(100_000),
+      })
+      .nullable()
+      .optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "Nothing to change");
 
 // The JSON shape the model must return (Ollama structured output).
 export const modelOutputSchema = {

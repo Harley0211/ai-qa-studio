@@ -5,7 +5,7 @@ requirements documents (PRDs) into test cases with a local AI model, lets you
 review and refine them before they are saved, and then manage, run and export
 them per project. Team members sign in; everyone works on all projects.
 
-**Status (23 Nov 2026):** 366 automated tests pass (219 server, 147 web) and the
+**Status (23 Nov 2026):** 381 automated tests pass (229 server, 152 web) and the
 production build succeeds.
 
 ---
@@ -110,28 +110,44 @@ The project's **Test cases** tab:
    (page URL, browser, device, build) are optional; the browser and OS are
    filled in for you.
 2. Attach evidence (optional): **screenshots** (PNG, JPG, WEBP up to 5 MB),
-   **screen recordings** (MP4, WebM… up to 500 MB) and **HAR files** (up to
+   **screen recordings** (MP4, WebM… up to 95 MB) and **HAR files** (up to
    200 MB). A HAR's failed requests show right away.
-3. **Generate bug report.** The AI writes a title (`[Area] What goes wrong`),
-   summary, steps to reproduce, expected and actual result, **root cause
-   analysis** and severity (with the matching Jira priority). Typically under
-   a minute.
-4. Copy the **Jira** description (Jira Cloud Markdown, or wiki markup for Jira
+3. **Generate bug report.** It runs **in the background**: the form clears for
+   the next report, and you can go to any other page. A small activity card
+   (bottom left) shows the progress on every page and says when the report is
+   ready. The AI writes a title (`[Area] What goes wrong`), summary, steps to
+   reproduce, expected and actual result, **root cause analysis** and severity
+   (with the matching Jira priority). Typically under a minute.
+4. Open the report from **Saved bug reports** (or the activity card). Copy the
+   **Jira** description (Jira Cloud Markdown, or wiki markup for Jira
    Server / Data Center) and the **Slack** message, which starts with
-   "Hi team,". Title and severity can be changed, and the texts edited, before
-   copying.
+   "Hi team,". Change the title or severity, or edit the texts, and **Save
+   changes**.
 5. **Download ZIP**: Jira texts (Markdown and wiki), the Slack message, the
-   title, `report.json`, the original screenshots and videos, the frames taken
-   from each video, and for every HAR a **redacted copy** plus a readable
-   summary.
+   title, `report.json` and every file in the report's folder.
+
+**Saved bug reports (folders).** Every report is saved on the server from the
+moment it starts, in its own folder: screenshots, the frames taken from each
+video, the videos, and for every HAR a **redacted copy** plus a readable
+summary. The list shows each folder's status, severity, file count, size, date
+and who made it; everyone in the team can open them. Only the person who made
+a report (or an admin) can edit or **delete** it, and deleting it removes its
+folder from storage too.
+
+The AI runs on the server, so a report keeps generating even if the browser
+is closed (preparing video frames and uploading happen in the browser first,
+and keep going while you move around the app). If the server restarts while a
+report is generating, it is marked *interrupted*: click **Retry**, which uses
+the same saved images. One report generates at a time per person.
 
 How the evidence is used:
-- **HAR files are read in the browser** and never uploaded. Their exact
-  status codes and error messages go to the AI as text, so the root cause is
-  based on the real failed requests, and the network error table in the Jira
-  and Slack texts comes straight from the file (not from the AI).
-- **Videos** stay in the browser too: a few frames spread through the
-  recording are sent to the AI as images (the model reads images, not video).
+- **HAR files are read in the browser**; only a redacted copy is saved. Their
+  exact status codes and error messages go to the AI as text, so the root
+  cause is based on the real failed requests, and the network error table in
+  the Jira and Slack texts comes straight from the file (not from the AI).
+- **Videos**: a few frames spread through the recording are sent to the AI as
+  images (the model reads images, not video); the video itself is saved in
+  the folder.
 - The AI sees at most 12 images: up to 8 screenshots when there are videos,
   and up to 4 frames per video.
 - The redacted HAR has cookies, `Authorization`/token headers, and
@@ -150,6 +166,21 @@ as HAR*) in the browser:
   secrets are hidden unless you untick **Hide secrets**.
 - Download a **summary** (.md) or a **redacted HAR**, or **Create bug report**
   to open the bug report tool with the file attached.
+- **HAR library:** every HAR opened here is saved (as a redacted copy, up to
+  95 MB) in its own folder and listed with its request and failure counts and
+  first error. Open one to read it again; the person who saved it (or an
+  admin) can delete it, which removes its folder from storage.
+
+### Where saved files are kept
+Bug report and HAR folders are stored on the server's disk, in
+`apps/server/storage/bug-reports/<id>/` and `apps/server/storage/har-files/<id>/`
+(ignored by git). Back up that folder together with the database. Files are
+kept on this computer rather than in a cloud drive because HARs and
+recordings can hold session data, and it needs no extra accounts or keys; all
+file access goes through `src/lib/fileStore.js`, so a cloud backend (for
+example Google Drive) can be added there later. A single saved file is
+limited to 95 MB (`MAX_SAVED_FILE_MB`) because the public Cloudflare link
+refuses uploads over 100 MB.
 
 ### Sign-in and users
 - **First run:** the first person to open the app creates the **admin**
@@ -557,13 +588,19 @@ screenshot downloads, which use their own one-time tokens. All routes are under
 | `GET /generations/:runId/refinements` | AI chat history of a batch, with each reply |
 | `POST /generations/:runId/callback`, `POST /generations/:runId/failure` | Used by n8n (one-time Bearer token) |
 
-Bug reports (`/api/bug-reports`, signed in; jobs are kept in memory for an
-hour and only their owner can read them):
+Bug reports and the HAR library (signed in; shared with the team; changing or
+deleting needs the creator or an admin):
 
 | Method and path | Purpose |
 |---|---|
-| `POST /api/bug-reports` | Multipart: `details` (JSON: description, steps, expected, environment, `harFacts`, `imageNotes`, `attachments`) and up to 12 `images`. Returns `202 { id }` |
-| `GET /api/bug-reports/:id` | `PENDING`, then `SUCCEEDED` with `report`, or `FAILED` with `error` |
+| `POST /api/bug-reports` | Start one. Multipart: `details` (JSON: description, steps, expected, environment, `harFacts`, `imageNotes`, `imageKinds`, `attachments`, `harErrors`) and up to 12 `images` for the AI. Returns `202 { id }` |
+| `GET /api/bug-reports`, `GET /api/bug-reports/:id` | List (newest first), one report with its `report`, `texts` and `files` |
+| `POST /api/bug-reports/:id/files` | Add a file to its folder (`kind`: image, video, har, har-summary; `file`) |
+| `GET /api/bug-reports/:id/files/:fileId` | Download a file (`?download=1` as an attachment) |
+| `PATCH /api/bug-reports/:id` | Save `title`, `severity`, edited `texts` |
+| `POST /api/bug-reports/:id/retry` | Run the AI again after a failure |
+| `DELETE /api/bug-reports/:id` | Delete the report and its folder |
+| `GET`/`POST /api/har-files`, `GET`/`DELETE /api/har-files/:id`, `GET /api/har-files/:id/file` | HAR library: list, save (`file` + `summary`), read, delete with its folder, download |
 
 The server calls Ollama directly for bug reports (`OLLAMA_URL`, default
 `http://127.0.0.1:11434`; `OLLAMA_MODEL`, default `qwen3-vl:2b-instruct`).
@@ -627,8 +664,8 @@ the filtered list.
 
 | Suite | Files | Tests |
 |---|---:|---:|
-| Server (`apps/server/tests`) | 15 | 219 |
-| Web (`apps/web/src/**/*.test.*`) | 17 | 147 |
+| Server (`apps/server/tests`) | 16 | 229 |
+| Web (`apps/web/src/**/*.test.*`) | 17 | 152 |
 
 Server tests run against a separate SQLite database (`test.db`) that is rebuilt
 on every run; n8n is mocked. Web tests mock the API with `mockApi` from

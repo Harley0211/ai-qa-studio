@@ -13,6 +13,8 @@ import PrdToTestCasesPage from "../features/tools/PrdToTestCasesPage.jsx";
 import { BUG_REPORT_PATH, HAR_READER_PATH, IMAGE_TOOL_PATH, PRD_TOOL_PATH } from "../features/tools/paths.js";
 import BugReportPage from "../features/bug-report/BugReportPage.jsx";
 import HarReaderPage from "../features/har/HarReaderPage.jsx";
+import BugReportDetailPage from "../features/bug-report/BugReportDetailPage.jsx";
+import HarFilePage from "../features/har/HarFilePage.jsx";
 import DocumentsTab from "../features/documents/DocumentsTab.jsx";
 import { AuthGate } from "../features/auth/AuthGate.jsx";
 import UsersPage from "../features/auth/UsersPage.jsx";
@@ -40,7 +42,9 @@ export function AppRoutes() {
         <Route path={IMAGE_TOOL_PATH} element={<ImageToTestCasesPage />} />
         <Route path={PRD_TOOL_PATH} element={<PrdToTestCasesPage />} />
         <Route path={BUG_REPORT_PATH} element={<BugReportPage />} />
+        <Route path={`${BUG_REPORT_PATH}/:reportId`} element={<BugReportDetailPage />} />
         <Route path={HAR_READER_PATH} element={<HarReaderPage />} />
+        <Route path={`${HAR_READER_PATH}/:harId`} element={<HarFilePage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

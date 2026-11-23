@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, matchPath, useLocation } from 'react-router-dom';
 import { AccountMenu } from '../../features/auth/AccountMenu.jsx';
 import { useCurrentUser } from '../../features/auth/auth.hooks.js';
+import { BackgroundActivity } from '../../features/bug-report/BackgroundActivity.jsx';
 import {
   BUG_REPORT_PATH,
   HAR_READER_PATH,
@@ -157,6 +158,8 @@ export function AppLayout() {
           </div>
         </div>
       </aside>
+
+      <BackgroundActivity />
 
       <main className="relative z-10 lg:pl-64">
         <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">

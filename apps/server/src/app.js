@@ -19,6 +19,8 @@ import { createN8nClient } from "./modules/generation/generation.n8n.js";
 import { createOllamaClient } from "./modules/bug-reports/bugReports.ollama.js";
 import { bugReportsRouter } from "./modules/bug-reports/bugReports.routes.js";
 import { createBugReportService } from "./modules/bug-reports/bugReports.service.js";
+import { harFilesRouter } from "./modules/har-files/harFiles.routes.js";
+import { DEFAULT_FILES_ROOT, createFileStore } from "./lib/fileStore.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -29,6 +31,7 @@ export function createApp({
   prisma,
   env,
   storageRoot = DEFAULT_STORAGE_ROOT,
+  filesRoot = DEFAULT_FILES_ROOT,
   n8nClient: injectedN8nClient,
   ollamaClient: injectedOllamaClient,
 }) {
@@ -39,11 +42,19 @@ export function createApp({
       webhookUrl: env.N8N_WEBHOOK_URL,
       requestSecret: env.N8N_REQUEST_SECRET,
     });
+  const fileStore = createFileStore(filesRoot);
   const bugReports = createBugReportService({
+    prisma,
+    store: fileStore,
     ollama:
       injectedOllamaClient ??
       createOllamaClient({ baseUrl: env.OLLAMA_URL, model: env.OLLAMA_MODEL }),
   });
+  // A report that was generating when the server stopped can't finish.
+  bugReports.recoverInterrupted().catch((error) => {
+    if (env.NODE_ENV !== "test") console.error("[bug reports] recovery failed", error);
+  });
+  const maxFileBytes = env.MAX_SAVED_FILE_MB * 1024 * 1024;
   app.disable("x-powered-by");
   // Behind a tunnel or reverse proxy on this machine, trust its
   // X-Forwarded-* headers (https, client IP). Nothing else can set them.
@@ -69,6 +80,8 @@ export function createApp({
     }),
   );
 
+  // Saved bug report texts can be larger than other requests.
+  app.use("/api/bug-reports", express.json({ limit: "1mb" }));
   app.use(express.json({ limit: "100kb" }));
 
   const sessions = createSessionStore({
@@ -108,7 +121,13 @@ export function createApp({
     bugReportsRouter({
       service: bugReports,
       maxUploadBytes: env.MAX_UPLOAD_MB * 1024 * 1024,
+      maxFileBytes,
     }),
+  );
+  app.use(
+    "/api/har-files",
+    requireAuth(),
+    harFilesRouter({ prisma, store: fileStore, maxFileBytes }),
   );
 
   app.use("/api", notFoundHandler);

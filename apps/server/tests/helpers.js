@@ -61,6 +61,9 @@ export async function createSignedInUser({ email, name, role = "MEMBER", passwor
 }
 
 export async function resetDb() {
+  await prisma.bugReportFile.deleteMany();
+  await prisma.bugReport.deleteMany();
+  await prisma.harFile.deleteMany();
   await prisma.testCase.deleteMany();
   await prisma.generationRun.deleteMany();
   await prisma.document.deleteMany();

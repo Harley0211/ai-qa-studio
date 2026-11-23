@@ -19,6 +19,67 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   sessions     Session[]
+  bugReports   BugReport[]
+  harFiles     HarFile[]
+}
+
+// A generated bug report and its folder of files (storage/bug-reports/<id>/).
+// Shared with the whole team, like projects.
+model BugReport {
+  id           String    @id @default(cuid())
+  status       String    @default("PENDING") // PENDING, SUCCEEDED, FAILED
+  error        String?
+  // From the generated report, for the list.
+  title        String?
+  severity     String?
+  affectedArea String?
+  // JSON: what the tester entered plus facts from the attachments (HAR
+  // errors, image notes), kept so the report can be retried and formatted.
+  input        String
+  report       String?   // JSON: the generated report
+  texts        String?   // JSON: Jira/Slack texts as edited and saved
+  createdById  String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  completedAt  DateTime?
+
+  createdBy User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  files     BugReportFile[]
+
+  @@index([createdAt])
+  @@index([status])
+}
+
+model BugReportFile {
+  id          String   @id @default(cuid())
+  bugReportId String
+  name        String
+  kind        String   // image, frame, video, har, har-summary
+  mimeType    String
+  size        Int
+  storageKey  String   // relative to the storage root
+  aiOrder     Int?     // position among the images sent to the AI (null: not sent)
+  createdAt   DateTime @default(now())
+
+  bugReport BugReport @relation(fields: [bugReportId], references: [id], onDelete: Cascade)
+
+  @@index([bugReportId])
+}
+
+// A HAR file opened in the HAR reader, saved (redacted) in its own folder
+// (storage/har-files/<id>/).
+model HarFile {
+  id          String   @id @default(cuid())
+  name        String
+  size        Int
+  summary     String   // JSON: request and error counts, for the list
+  storageKey  String
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
 }
 
 // A signed-in browser. Only a hash of the cookie token is stored.

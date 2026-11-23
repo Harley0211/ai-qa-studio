@@ -1,40 +1,35 @@
 import {
-  Bug,
-  Check,
-  Copy,
-  Download,
   FileJson,
   Film,
+  Folder,
   Image as ImageIcon,
+  Loader2,
   Paperclip,
-  RotateCcw,
   Sparkles,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { PageHeader } from "../../components/layout/PageHeader.jsx";
 import { Button } from "../../components/ui/Button.jsx";
+import { EmptyState, ErrorState, LoadingState } from "../../components/ui/States.jsx";
 import { TextField } from "../../components/ui/TextField.jsx";
 import { useToast } from "../../components/ui/Toast.jsx";
-import { downloadBlob } from "../../lib/zip.js";
 import { HarErrors } from "../har/HarViews.jsx";
-import { formatBytes, harFactsForAi, readHarFile } from "../har/harParser.js";
+import { formatBytes, readHarFile } from "../har/harParser.js";
+import { bugReportHref } from "../tools/paths.js";
 import {
   MAX_AI_IMAGES,
+  MAX_SAVED_FILE_BYTES,
   attachmentKind,
   attachmentProblem,
-  buildBugReportZip,
-  frameName,
   framePlan,
 } from "./attachments.js";
-import { PRIORITY_FOR_SEVERITY, jiraMarkdown, jiraWiki, slackMessage, slugify } from "./formatters.js";
-import { detectBrowser, useBugReportJob, useStartBugReport } from "./hooks.js";
-import { extractFrames, formatTimestamp } from "./videoFrames.js";
+import { startBugReportTask, useBackgroundTasks } from "./backgroundTasks.js";
+import { detectBrowser, useBugReports } from "./hooks.js";
+import { SeverityBadge, StatusBadge } from "./ReportBadges.jsx";
 
-const SEVERITIES = ["Blocker", "Critical", "Major", "Minor", "Trivial"];
 const KIND_ICON = { image: ImageIcon, video: Film, har: FileJson };
-const MAX_HAR_FACTS = 12000;
 let nextId = 1;
 
 function StepHeading({ number, children }) {
@@ -45,28 +40,11 @@ function StepHeading({ number, children }) {
   );
 }
 
-function CopyButton({ text, label }) {
-  const toast = useToast();
-  const [copied, setCopied] = useState(false);
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      toast.error("Couldn't copy. Select the text and copy it instead.");
-    }
-  }
-
-  return (
-    <Button variant="secondary" size="sm" icon={copied ? Check : Copy} onClick={copy}>
-      {copied ? "Copied" : label}
-    </Button>
-  );
+function formatWhen(value) {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
-function AttachmentRow({ item, onRemove, disabled }) {
+function AttachmentRow({ item, onRemove }) {
   const Icon = KIND_ICON[item.kind];
   return (
     <li className="rounded-lg border border-slate-200 bg-white">
@@ -92,9 +70,8 @@ function AttachmentRow({ item, onRemove, disabled }) {
         <button
           type="button"
           onClick={() => onRemove(item.id)}
-          disabled={disabled}
           aria-label={`Remove ${item.file.name}`}
-          className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-red-600 disabled:opacity-50"
+          className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-red-600"
         >
           <X className="h-4 w-4" aria-hidden="true" />
         </button>
@@ -108,7 +85,7 @@ function AttachmentRow({ item, onRemove, disabled }) {
   );
 }
 
-function AttachmentsStep({ attachments, onAdd, onRemove, disabled, plan }) {
+function AttachmentsStep({ attachments, onAdd, onRemove, plan }) {
   const input = useRef(null);
   const [dragging, setDragging] = useState(false);
   const counts = attachments.reduce((acc, item) => ({ ...acc, [item.kind]: (acc[item.kind] ?? 0) + 1 }), {});
@@ -136,7 +113,7 @@ function AttachmentsStep({ attachments, onAdd, onRemove, disabled, plan }) {
         <Paperclip className="mb-2 h-6 w-6 text-indigo-600" aria-hidden="true" />
         <p className="text-sm font-semibold text-slate-900">Drop screenshots, screen recordings and HAR files</p>
         <p className="mt-1 text-xs text-slate-500">
-          Images: PNG, JPG, WEBP up to 5 MB · Videos: MP4, WebM up to 500 MB · HAR up to 200 MB
+          Images: PNG, JPG, WEBP up to 5 MB · Videos: MP4, WebM up to {formatBytes(MAX_SAVED_FILE_BYTES)} · HAR up to 200 MB
         </p>
         <input
           ref={input}
@@ -150,7 +127,7 @@ function AttachmentsStep({ attachments, onAdd, onRemove, disabled, plan }) {
             event.target.value = "";
           }}
         />
-        <Button variant="secondary" className="mt-3" disabled={disabled} onClick={() => input.current?.click()}>
+        <Button variant="secondary" className="mt-3" onClick={() => input.current?.click()}>
           Choose files
         </Button>
       </div>
@@ -159,14 +136,14 @@ function AttachmentsStep({ attachments, onAdd, onRemove, disabled, plan }) {
         <>
           <ul className="mt-3 space-y-2">
             {attachments.map((item) => (
-              <AttachmentRow key={item.id} item={item} onRemove={onRemove} disabled={disabled} />
+              <AttachmentRow key={item.id} item={item} onRemove={onRemove} />
             ))}
           </ul>
           <p className="mt-2 text-xs text-slate-500">
             The AI sees up to {MAX_AI_IMAGES} images:{" "}
             {counts.image ? `${plan.screenshots} of ${counts.image} screenshots` : "no screenshots"}
             {counts.video ? `, ${plan.perVideo} frames from each video` : ""}
-            {counts.har ? ", and the exact errors from every HAR file" : ""}. Everything is included in the ZIP.
+            {counts.har ? ", and the exact errors from every HAR file" : ""}. Everything is saved in the report's folder.
           </p>
         </>
       )}
@@ -174,131 +151,76 @@ function AttachmentsStep({ attachments, onAdd, onRemove, disabled, plan }) {
   );
 }
 
-function ResultView({ report, onChange, texts, onTextChange, onDownload, downloading, onReset }) {
-  const [tab, setTab] = useState("jira");
-  const [jiraFlavor, setJiraFlavor] = useState("markdown");
-  const jiraText = jiraFlavor === "markdown" ? texts.jiraMarkdown : texts.jiraWiki;
+// Reports being prepared, uploaded or written right now (this browser).
+function InProgress() {
+  const tasks = useBackgroundTasks().filter((task) => task.phase !== "done" && task.phase !== "failed");
+  if (tasks.length === 0) return null;
 
   return (
-    <section aria-label="Generated bug report" className="space-y-4 rounded-xl border border-indigo-200 bg-white p-5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
-          <Bug className="h-5 w-5 text-indigo-600" aria-hidden="true" />
-          Bug report ready
-        </h2>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" icon={RotateCcw} onClick={onReset}>
-            New report
-          </Button>
-          <Button icon={Download} loading={downloading} onClick={onDownload}>
-            Download ZIP
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-        <div>
-          <label htmlFor="bug-title" className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Jira summary (title)
-          </label>
-          <div className="mt-1 flex gap-2">
-            <input
-              id="bug-title"
-              value={report.title}
-              onChange={(event) => onChange({ ...report, title: event.target.value })}
-              className="block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900"
-            />
-            <CopyButton text={report.title} label="Copy" />
+    <section aria-label="In progress" className="space-y-2">
+      {tasks.map((task) => (
+        <div key={task.id} className="flex items-center gap-3 rounded-xl border border-indigo-200 bg-white px-4 py-3">
+          <Loader2 className="h-4 w-4 animate-spin text-indigo-600" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-slate-900">{task.label}</p>
+            <p className="text-xs text-slate-500">{task.message} You can leave this page; it keeps going.</p>
           </div>
+          {task.reportId && (
+            <Link to={bugReportHref(task.reportId)} className="text-sm font-medium text-indigo-600 hover:underline">
+              Open
+            </Link>
+          )}
         </div>
-        <div>
-          <label htmlFor="bug-severity" className="block text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Severity
-          </label>
-          <select
-            id="bug-severity"
-            value={report.severity}
-            onChange={(event) => onChange({ ...report, severity: event.target.value })}
-            className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-          >
-            {SEVERITIES.map((value) => (
-              <option key={value} value={value}>
-                {value} (priority {PRIORITY_FOR_SEVERITY[value]})
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-      <p className="text-xs text-slate-500">
-        Changing the title or severity rewrites the texts below. You can also edit the texts directly before copying.
-      </p>
+      ))}
+    </section>
+  );
+}
 
-      <div role="tablist" aria-label="Report format" className="flex gap-1 border-b border-slate-200">
-        {[
-          ["jira", "Jira"],
-          ["slack", "Slack"],
-        ].map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={tab === key}
-            onClick={() => setTab(key)}
-            className={`rounded-t-lg px-4 py-2 text-sm font-semibold ${
-              tab === key ? "bg-indigo-50 text-indigo-700" : "text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+// Every saved report, each a folder of files.
+export function SavedReports() {
+  const { data, isPending, isError, error, refetch } = useBugReports();
+  const items = data?.items ?? [];
 
-      {tab === "jira" ? (
-        <div role="tabpanel" aria-label="Jira" className="space-y-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div role="group" aria-label="Jira format" className="flex gap-1">
-              {[
-                ["markdown", "Jira Cloud (Markdown)"],
-                ["wiki", "Jira Server / Data Center (wiki)"],
-              ].map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  aria-pressed={jiraFlavor === key}
-                  onClick={() => setJiraFlavor(key)}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${
-                    jiraFlavor === key ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <CopyButton text={jiraText} label="Copy description" />
-          </div>
-          <textarea
-            aria-label="Jira description"
-            value={jiraText}
-            onChange={(event) =>
-              onTextChange(jiraFlavor === "markdown" ? "jiraMarkdown" : "jiraWiki", event.target.value)
-            }
-            rows={18}
-            className="block w-full rounded-lg border border-slate-300 bg-white p-3 font-mono text-xs text-slate-800"
-          />
-        </div>
+  return (
+    <section aria-label="Saved bug reports" className="space-y-3">
+      <h2 className="text-base font-semibold text-slate-900">Saved bug reports</h2>
+      {isPending ? (
+        <LoadingState label="Loading bug reports..." />
+      ) : isError ? (
+        <ErrorState error={error} onRetry={() => refetch()} />
+      ) : items.length === 0 ? (
+        <EmptyState
+          icon={Folder}
+          title="No bug reports yet"
+          description="Every report you generate is saved here in its own folder, with its files."
+        />
       ) : (
-        <div role="tabpanel" aria-label="Slack" className="space-y-2">
-          <div className="flex justify-end">
-            <CopyButton text={texts.slack} label="Copy message" />
-          </div>
-          <textarea
-            aria-label="Slack message"
-            value={texts.slack}
-            onChange={(event) => onTextChange("slack", event.target.value)}
-            rows={18}
-            className="block w-full rounded-lg border border-slate-300 bg-white p-3 font-mono text-xs text-slate-800"
-          />
-        </div>
+        <ul className="grid gap-3 sm:grid-cols-2">
+          {items.map((item) => (
+            <li key={item.id}>
+              <Link
+                to={bugReportHref(item.id)}
+                className="flex h-full gap-3 rounded-xl border border-slate-200 bg-white p-4 transition-colors hover:border-indigo-300"
+              >
+                <Folder className="mt-0.5 h-5 w-5 shrink-0 text-indigo-500" aria-hidden="true" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-slate-900">
+                    {item.title || item.description || "Bug report"}
+                  </span>
+                  <span className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <StatusBadge status={item.status} />
+                    {item.severity && <SeverityBadge severity={item.severity} />}
+                  </span>
+                  <span className="mt-1.5 block text-xs text-slate-500">
+                    {item.fileCount} {item.fileCount === 1 ? "file" : "files"} · {formatBytes(item.totalSize)} ·{" "}
+                    {formatWhen(item.createdAt)}
+                    {item.createdBy && ` · ${item.createdBy.name}`}
+                  </span>
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );
@@ -308,35 +230,14 @@ export default function BugReportPage() {
   const toast = useToast();
   const location = useLocation();
   const detected = useMemo(() => detectBrowser(), []);
-  const [form, setForm] = useState({ description: "", steps: "", expected: "" });
+  const emptyForm = { description: "", steps: "", expected: "" };
+  const [form, setForm] = useState(emptyForm);
   const [environment, setEnvironment] = useState({ url: "", browser: detected.browser, device: detected.device, build: "" });
   const [attachments, setAttachments] = useState([]);
-  const [preparing, setPreparing] = useState(null);
-  const [jobId, setJobId] = useState(null);
-  const [frames, setFrames] = useState([]);
-  const [report, setReport] = useState(null);
-  const [texts, setTexts] = useState(null);
-  const [downloading, setDownloading] = useState(false);
   const [errors, setErrors] = useState({});
-  const start = useStartBugReport();
-  const job = useBugReportJob(jobId);
-  const jobData = job.data?.data;
-
   const counts = attachments.reduce((acc, item) => ({ ...acc, [item.kind]: (acc[item.kind] ?? 0) + 1 }), {});
   const plan = framePlan(counts.image ?? 0, counts.video ?? 0);
-  const hars = attachments.filter((item) => item.kind === "har" && item.har);
-  const harErrors = useMemo(
-    () => hars.flatMap((item) => item.har.summary.errors.map((entry) => ({ file: item.file.name, entry }))),
-    [hars],
-  );
-  const context = useMemo(
-    () => ({
-      environment,
-      attachments: attachments.map((item) => ({ name: item.file.name, kind: item.kind })),
-      harErrors,
-    }),
-    [environment, attachments, harErrors],
-  );
+  const busyTasks = useBackgroundTasks().filter((task) => task.phase !== "done" && task.phase !== "failed");
 
   function addFiles(files) {
     const added = [];
@@ -379,33 +280,7 @@ export default function BugReportPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // When the AI has finished, build the texts.
-  useEffect(() => {
-    if (jobData?.status === "SUCCEEDED" && !report) {
-      setReport(jobData.report);
-      setTexts({
-        jiraMarkdown: jiraMarkdown(jobData.report, context),
-        jiraWiki: jiraWiki(jobData.report, context),
-        slack: slackMessage(jobData.report, context),
-      });
-      toast.success("Bug report ready.");
-    }
-    if (jobData?.status === "FAILED") {
-      toast.error(jobData.error || "Unable to generate the bug report.");
-      setJobId(null);
-    }
-  }, [jobData, report, context, toast]);
-
-  function updateReport(next) {
-    setReport(next);
-    setTexts({
-      jiraMarkdown: jiraMarkdown(next, context),
-      jiraWiki: jiraWiki(next, context),
-      slack: slackMessage(next, context),
-    });
-  }
-
-  async function generate() {
+  function generate() {
     if (form.description.trim().length < 10) {
       setErrors({ description: "Describe what happened (at least 10 characters)." });
       return;
@@ -414,87 +289,18 @@ export default function BugReportPage() {
       toast.error("Wait until the HAR files have been read.");
       return;
     }
+    if (busyTasks.length > 0) {
+      toast.error("Wait for your current bug report to finish.");
+      return;
+    }
     setErrors({});
-
-    try {
-      const images = [];
-      const imageNotes = [];
-      for (const item of attachments.filter((x) => x.kind === "image").slice(0, plan.screenshots)) {
-        images.push({ blob: item.file, name: item.file.name });
-        imageNotes.push(`Screenshot ${item.file.name}`);
-      }
-
-      const takenFrames = [];
-      const videos = attachments.filter((x) => x.kind === "video").slice(0, plan.videosWithFrames ?? 0);
-      for (const [index, item] of videos.entries()) {
-        setPreparing(`Reading frames from video ${index + 1} of ${videos.length}…`);
-        try {
-          const result = await extractFrames(item.file, { count: plan.perVideo });
-          result.forEach((frame, i) => {
-            const name = frameName(item.file.name, frame.time, i);
-            takenFrames.push({ ...frame, name });
-            images.push({ blob: frame.blob, name });
-            imageNotes.push(`Frame ${i + 1} of video ${item.file.name} at ${formatTimestamp(frame.time)}`);
-          });
-        } catch (err) {
-          toast.error(err.message);
-        }
-      }
-      setFrames(takenFrames);
-
-      setPreparing("Sending to the AI…");
-      const harFacts = hars
-        .map((item) => harFactsForAi(item.file.name, item.har.summary))
-        .join("\n\n")
-        .slice(0, MAX_HAR_FACTS);
-      const formData = new FormData();
-      formData.append(
-        "details",
-        JSON.stringify({
-          ...form,
-          environment,
-          harFacts,
-          imageNotes: imageNotes.slice(0, MAX_AI_IMAGES),
-          attachments: context.attachments,
-        }),
-      );
-      images.slice(0, MAX_AI_IMAGES).forEach(({ blob, name }) => formData.append("images", blob, name));
-
-      const result = await start.mutateAsync(formData);
-      setReport(null);
-      setJobId(result.data.id);
-    } catch (err) {
-      toast.error(err.message || "Unable to start the bug report.");
-    } finally {
-      setPreparing(null);
-    }
-  }
-
-  async function download() {
-    setDownloading(true);
-    try {
-      const blob = await buildBugReportZip({ report, texts, attachments, frames, hars: hars.map((item) => ({ file: item.file, parsed: item.har })) });
-      downloadBlob(blob, `bug-report-${slugify(report.title)}-${new Date().toISOString().slice(0, 10)}.zip`);
-    } catch (err) {
-      toast.error(err.message || "Unable to build the ZIP file.");
-    } finally {
-      setDownloading(false);
-    }
-  }
-
-  function reset() {
-    attachments.forEach((item) => item.previewUrl && URL.revokeObjectURL(item.previewUrl));
+    startBugReportTask({ form, environment, attachments, maxFileBytes: MAX_SAVED_FILE_BYTES });
+    toast.success("Generating in the background. You can keep working; you'll be told when it's ready.");
+    // The task keeps the files; the form is ready for the next report.
+    setForm(emptyForm);
     setAttachments([]);
-    setForm({ description: "", steps: "", expected: "" });
     setEnvironment((env) => ({ ...env, url: "", build: "" }));
-    setReport(null);
-    setTexts(null);
-    setFrames([]);
-    setJobId(null);
   }
-
-  const generating = Boolean(preparing) || start.isPending || jobData?.status === "PENDING" || (jobId && !jobData);
-  const busy = generating || Boolean(report);
 
   return (
     <>
@@ -505,18 +311,6 @@ export default function BugReportPage() {
       />
 
       <div className="space-y-6">
-        {report && texts && (
-          <ResultView
-            report={report}
-            onChange={updateReport}
-            texts={texts}
-            onTextChange={(key, value) => setTexts((current) => ({ ...current, [key]: value }))}
-            onDownload={download}
-            downloading={downloading}
-            onReset={reset}
-          />
-        )}
-
         <div className="space-y-6 rounded-xl border border-slate-200 bg-white p-5">
           <section className="space-y-3">
             <StepHeading number={1}>What happened</StepHeading>
@@ -528,7 +322,6 @@ export default function BugReportPage() {
               onChange={(event) => setForm({ ...form, description: event.target.value })}
               placeholder="e.g. After clicking Place order, an error toast says “Something went wrong” and no order is created."
               error={errors.description}
-              disabled={busy}
             />
             <div className="grid gap-3 sm:grid-cols-2">
               <TextField
@@ -537,66 +330,38 @@ export default function BugReportPage() {
                 value={form.steps}
                 onChange={(event) => setForm({ ...form, steps: event.target.value })}
                 placeholder={"One step per line\nOpen the cart\nClick Place order"}
-                disabled={busy}
               />
               <TextField
                 label="What you expected (optional)"
                 multiline
                 value={form.expected}
                 onChange={(event) => setForm({ ...form, expected: event.target.value })}
-                disabled={busy}
               />
             </div>
             <div className="grid gap-3 sm:grid-cols-4">
-              <TextField
-                label="Page / URL"
-                value={environment.url}
-                onChange={(event) => setEnvironment({ ...environment, url: event.target.value })}
-                disabled={busy}
-              />
-              <TextField
-                label="Browser"
-                value={environment.browser}
-                onChange={(event) => setEnvironment({ ...environment, browser: event.target.value })}
-                disabled={busy}
-              />
-              <TextField
-                label="Device / OS"
-                value={environment.device}
-                onChange={(event) => setEnvironment({ ...environment, device: event.target.value })}
-                disabled={busy}
-              />
-              <TextField
-                label="Build / version"
-                value={environment.build}
-                onChange={(event) => setEnvironment({ ...environment, build: event.target.value })}
-                disabled={busy}
-              />
+              <TextField label="Page / URL" value={environment.url} onChange={(event) => setEnvironment({ ...environment, url: event.target.value })} />
+              <TextField label="Browser" value={environment.browser} onChange={(event) => setEnvironment({ ...environment, browser: event.target.value })} />
+              <TextField label="Device / OS" value={environment.device} onChange={(event) => setEnvironment({ ...environment, device: event.target.value })} />
+              <TextField label="Build / version" value={environment.build} onChange={(event) => setEnvironment({ ...environment, build: event.target.value })} />
             </div>
           </section>
 
-          <AttachmentsStep
-            attachments={attachments}
-            onAdd={addFiles}
-            onRemove={removeAttachment}
-            disabled={busy}
-            plan={plan}
-          />
+          <AttachmentsStep attachments={attachments} onAdd={addFiles} onRemove={removeAttachment} plan={plan} />
 
-          {!report && (
-            <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-5">
-              <Button icon={Sparkles} loading={generating} onClick={generate}>
-                Generate bug report
-              </Button>
-              <span role="status" className="text-xs text-slate-500">
-                {preparing ??
-                  (generating
-                    ? "The AI is writing the report. This can take a few minutes…"
-                    : "Title, root cause, Jira and Slack texts, and a ZIP with everything.")}
-              </span>
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-5">
+            <Button icon={Sparkles} onClick={generate} disabled={busyTasks.length > 0}>
+              Generate bug report
+            </Button>
+            <span className="text-xs text-slate-500">
+              {busyTasks.length > 0
+                ? "One report at a time: wait for the current one to finish."
+                : "Runs in the background and is saved with all its files. You can leave this page."}
+            </span>
+          </div>
         </div>
+
+        <InProgress />
+        <SavedReports />
       </div>
     </>
   );

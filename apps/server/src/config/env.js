@@ -45,6 +45,9 @@ const schema = z.object({
   // The local AI model, used directly by the bug report tool.
   OLLAMA_URL: z.string().url().default("http://127.0.0.1:11434"),
   OLLAMA_MODEL: z.string().min(1).default("qwen3-vl:2b-instruct"),
+  // Largest single file saved in a bug report or HAR folder. The public
+  // Cloudflare link refuses uploads over 100 MB, so stay just under it.
+  MAX_SAVED_FILE_MB: z.coerce.number().int().min(1).max(2048).default(95),
 });
 
 const parsed = schema.safeParse(process.env);
