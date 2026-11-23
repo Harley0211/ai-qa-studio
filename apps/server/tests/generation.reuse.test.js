@@ -193,6 +193,24 @@ describe("Skipping what the library already covers", () => {
     ]);
   });
 
+  it("shows n8n's 'already covered' reason plainly", async () => {
+    const project = await createProject();
+    const run = await startRun(project.id, []);
+    const res = await api()
+      .post(new URL(run.payload.callbackUrl).pathname.replace(/callback$/, "failure"))
+      .set("Authorization", `Bearer ${run.payload.callbackToken}`)
+      .send({
+        error:
+          "Plan Scenarios: Everything found in this evidence is already in the test case library (4 scenarios). Select new screenshots, or ask for something specific. [line 75]",
+      });
+    expect(res.status).toBe(200);
+
+    const saved = await api().get(`/api/projects/${project.id}/generations/${run.runId}`);
+    expect(saved.body.data.error).toBe(
+      "Everything found in this evidence is already in the test case library (4 scenarios). Select new screenshots, or ask for something specific.",
+    );
+  });
+
   it("flags drafts that repeat a library test case", async () => {
     const project = await createProject();
     await addToLibrary(project.id, ["Login with valid credentials"]);

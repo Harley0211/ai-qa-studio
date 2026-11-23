@@ -8,6 +8,8 @@ const CALLBACK_TOKEN_TTL_MS = 30 * 60 * 1000;
 const MAX_ERROR_LENGTH = 500;
 // Library titles sent to n8n so it skips scenarios that are already covered.
 export const MAX_EXISTING_TITLES = 300;
+// n8n's "nothing new to generate" reason; shown as is, not as a failure.
+const ALREADY_COVERED = /^Everything found in this evidence is already in the test case library/;
 export const TIMED_OUT_ERROR =
   "Timed out: n8n did not return test cases within 30 minutes";
 
@@ -426,11 +428,16 @@ export function createGenerationService({
     return prisma.$transaction(async (tx) => {
       const { refinesRunId } = await consumeCallbackToken(tx, projectId, runId, token, now);
 
-      // n8n prefixes the failing node's name ("Build Refine Request: ...");
-      // a chat reply only needs the reason itself.
+      // n8n prefixes the failing node's name ("Build Refine Request: ...") and
+      // may add the code line ("[line 75]"); users only need the reason.
+      const plainReason = reason
+        .replace(/^[^:\n]{1,60}: /, "")
+        .replace(/\s*\[line \d+\]\s*$/, "");
       const error = refinesRunId
-        ? `Couldn't make this change: ${reason.replace(/^[^:\n]{1,60}: /, "")}`
-        : `Generation failed in n8n: ${reason}`;
+        ? `Couldn't make this change: ${plainReason}`
+        : ALREADY_COVERED.test(plainReason)
+          ? plainReason
+          : `Generation failed in n8n: ${reason}`;
 
       await tx.generationRun.update({
         where: { id: runId },
