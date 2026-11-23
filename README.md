@@ -208,6 +208,9 @@ local; only the app's port is shared.
    "C:\Program Files (x86)\cloudflared\cloudflared.exe" tunnel --no-autoupdate --url http://127.0.0.1:4000
    ```
    It prints the public link, `https://<random-words>.trycloudflare.com`.
+
+   If cloudflared is installed elsewhere (see *No administrator rights?*
+   below), use that path instead. The VS Code task finds it by itself.
 4. Add your team on the **Users** page and send them the link.
 
 Notes:
@@ -241,6 +244,15 @@ that already ran the app before.
 - **n8n**: `npm install -g n8n`.
 - **cloudflared** (the tunnel): `winget install Cloudflare.cloudflared`.
   Windows asks for administrator permission; click **Yes**.
+
+  **No administrator rights?** Use the portable cloudflared instead: download
+  `cloudflared-windows-amd64.exe` from
+  https://github.com/cloudflare/cloudflared/releases/latest, rename it to
+  `cloudflared.exe` and put it in
+  `%USERPROFILE%\Documents\QA-Portable\tools\cloudflared\`. It needs no
+  install. The VS Code task **Public link (tunnel)** looks for cloudflared in
+  `C:\Program Files (x86)\cloudflared`, `C:\Program Files\cloudflared`, that
+  portable folder and then the PATH, in that order.
 
 **2. Get the code**
 
@@ -338,6 +350,12 @@ In another PowerShell window (or VS Code task **Public link (tunnel)**):
 
 ```powershell
 & "C:\Program Files (x86)\cloudflared\cloudflared.exe" tunnel --no-autoupdate --url http://127.0.0.1:4000
+```
+
+With the portable cloudflared (step 1), run this instead:
+
+```powershell
+& "$HOME\Documents\QA-Portable\tools\cloudflared\cloudflared.exe" tunnel --no-autoupdate --url http://127.0.0.1:4000
 ```
 
 After a few seconds it prints a box with an address like

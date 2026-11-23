@@ -29,7 +29,7 @@
       "label": "Public link (tunnel)",
       "detail": "Rebuild the web app, then share http://127.0.0.1:4000 at a https://...trycloudflare.com link (printed in this terminal).",
       "type": "shell",
-      "command": "npm run build; & 'C:\\Program Files (x86)\\cloudflared\\cloudflared.exe' tunnel --no-autoupdate --url http://127.0.0.1:4000",
+      "command": "npm run build; $cf = @('C:\\Program Files (x86)\\cloudflared\\cloudflared.exe', 'C:\\Program Files\\cloudflared\\cloudflared.exe', \"$HOME\\Documents\\QA-Portable\\tools\\cloudflared\\cloudflared.exe\") | Where-Object { Test-Path $_ } | Select-Object -First 1; if (-not $cf) { $cf = (Get-Command cloudflared -ErrorAction SilentlyContinue).Source }; if (-not $cf) { Write-Error 'cloudflared not found. Install it: winget install Cloudflare.cloudflared' } else { & $cf tunnel --no-autoupdate --url http://127.0.0.1:4000 }",
       "isBackground": true,
       "problemMatcher": [],
       "presentation": { "group": "aqs", "panel": "dedicated" }
