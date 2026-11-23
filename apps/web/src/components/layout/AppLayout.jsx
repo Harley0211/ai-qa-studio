@@ -1,9 +1,16 @@
-import { ChevronDown, FileText, FlaskConical, FolderKanban, Image, Menu, Sparkles, Users, X } from 'lucide-react';
+import { Bug, ChevronDown, FileJson, FileText, FlaskConical, FolderKanban, Image, Menu, Sparkles, Users, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, matchPath, useLocation } from 'react-router-dom';
 import { AccountMenu } from '../../features/auth/AccountMenu.jsx';
 import { useCurrentUser } from '../../features/auth/auth.hooks.js';
-import { IMAGE_TOOL_PATH, PRD_TOOL_PATH, imageToolHref, prdToolHref } from '../../features/tools/paths.js';
+import {
+  BUG_REPORT_PATH,
+  HAR_READER_PATH,
+  IMAGE_TOOL_PATH,
+  PRD_TOOL_PATH,
+  imageToolHref,
+  prdToolHref,
+} from '../../features/tools/paths.js';
 import { SEASONS, useSeason } from '../../lib/season.js';
 import { useTheme } from '../../lib/theme.js';
 import { IconButton } from '../ui/Button.jsx';
@@ -117,6 +124,17 @@ export function AppLayout() {
             </NavLink>
           ))}
           <ToolsNav pathname={pathname} />
+          <div className="pt-3">
+            <p className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-slate-400">QA tools</p>
+            <NavLink to={BUG_REPORT_PATH} className={navLinkClass}>
+              <Bug className="h-4 w-4" aria-hidden="true" />
+              Bug report
+            </NavLink>
+            <NavLink to={HAR_READER_PATH} className={navLinkClass}>
+              <FileJson className="h-4 w-4" aria-hidden="true" />
+              HAR reader
+            </NavLink>
+          </div>
           {user?.role === 'ADMIN' && (
             <div className="pt-3">
               <p className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-slate-400">Admin</p>

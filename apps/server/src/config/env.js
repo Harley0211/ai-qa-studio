@@ -42,6 +42,9 @@ const schema = z.object({
   // ...and the public host names allowed besides localhost. An entry that
   // starts with "." allows every host ending with it (".trycloudflare.com").
   PUBLIC_HOSTS: z.string().default(""),
+  // The local AI model, used directly by the bug report tool.
+  OLLAMA_URL: z.string().url().default("http://127.0.0.1:11434"),
+  OLLAMA_MODEL: z.string().min(1).default("qwen3-vl:2b-instruct"),
 });
 
 const parsed = schema.safeParse(process.env);

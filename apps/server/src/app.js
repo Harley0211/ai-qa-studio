@@ -16,6 +16,9 @@ import { healthRouter } from "./modules/health/health.routes.js";
 import { projectsRouter } from "./modules/projects/projects.routes.js";
 import { DEFAULT_STORAGE_ROOT } from "./modules/evidence/evidence.storage.js";
 import { createN8nClient } from "./modules/generation/generation.n8n.js";
+import { createOllamaClient } from "./modules/bug-reports/bugReports.ollama.js";
+import { bugReportsRouter } from "./modules/bug-reports/bugReports.routes.js";
+import { createBugReportService } from "./modules/bug-reports/bugReports.service.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -27,6 +30,7 @@ export function createApp({
   env,
   storageRoot = DEFAULT_STORAGE_ROOT,
   n8nClient: injectedN8nClient,
+  ollamaClient: injectedOllamaClient,
 }) {
   const app = express();
   const n8nClient =
@@ -35,12 +39,28 @@ export function createApp({
       webhookUrl: env.N8N_WEBHOOK_URL,
       requestSecret: env.N8N_REQUEST_SECRET,
     });
+  const bugReports = createBugReportService({
+    ollama:
+      injectedOllamaClient ??
+      createOllamaClient({ baseUrl: env.OLLAMA_URL, model: env.OLLAMA_MODEL }),
+  });
   app.disable("x-powered-by");
   // Behind a tunnel or reverse proxy on this machine, trust its
   // X-Forwarded-* headers (https, client IP). Nothing else can set them.
   app.set("trust proxy", "loopback");
 
-  app.use(helmet());
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          // Previews of chosen files and the frames read from videos are
+          // blob: URLs created by the page itself.
+          "img-src": ["'self'", "data:", "blob:"],
+          "media-src": ["'self'", "blob:"],
+        },
+      },
+    }),
+  );
   app.use(hostGuard(env.publicHosts ?? []));
   app.use(
     cors({
@@ -79,6 +99,15 @@ export function createApp({
       publicBackendUrl: env.PUBLIC_BACKEND_URL,
       evidenceSigningSecret: env.EVIDENCE_SIGNING_SECRET,
       evidenceUrlTtlSeconds: env.EVIDENCE_URL_TTL_SECONDS,
+    }),
+  );
+
+  app.use(
+    "/api/bug-reports",
+    requireAuth(),
+    bugReportsRouter({
+      service: bugReports,
+      maxUploadBytes: env.MAX_UPLOAD_MB * 1024 * 1024,
     }),
   );
 

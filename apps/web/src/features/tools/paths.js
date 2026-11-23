@@ -1,5 +1,7 @@
 export const IMAGE_TOOL_PATH = "/tools/image-to-test-cases";
 export const PRD_TOOL_PATH = "/tools/prd-to-test-cases";
+export const BUG_REPORT_PATH = "/tools/bug-report";
+export const HAR_READER_PATH = "/tools/har-reader";
 
 export function imageToolHref(projectId) {
   return `${IMAGE_TOOL_PATH}?${new URLSearchParams({ project: projectId })}`;

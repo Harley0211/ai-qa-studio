@@ -5,7 +5,7 @@ requirements documents (PRDs) into test cases with a local AI model, lets you
 review and refine them before they are saved, and then manage, run and export
 them per project. Team members sign in; everyone works on all projects.
 
-**Status (23 Nov 2026):** 333 automated tests pass (209 server, 124 web) and the
+**Status (23 Nov 2026):** 366 automated tests pass (219 server, 147 web) and the
 production build succeeds.
 
 ---
@@ -102,6 +102,54 @@ The project's **Test cases** tab:
 - **Export Excel** exports all or the selected cases.
 - A project-wide summary and progress bar ignore the current search and filter
   (see [Execution progress](#6-execution-progress)).
+
+### Bug report generator
+**QA tools → Bug report** writes a ready-to-paste bug ticket with the local AI.
+
+1. Describe what happened. Steps, what you expected and the environment
+   (page URL, browser, device, build) are optional; the browser and OS are
+   filled in for you.
+2. Attach evidence (optional): **screenshots** (PNG, JPG, WEBP up to 5 MB),
+   **screen recordings** (MP4, WebM… up to 500 MB) and **HAR files** (up to
+   200 MB). A HAR's failed requests show right away.
+3. **Generate bug report.** The AI writes a title (`[Area] What goes wrong`),
+   summary, steps to reproduce, expected and actual result, **root cause
+   analysis** and severity (with the matching Jira priority). Typically under
+   a minute.
+4. Copy the **Jira** description (Jira Cloud Markdown, or wiki markup for Jira
+   Server / Data Center) and the **Slack** message, which starts with
+   "Hi team,". Title and severity can be changed, and the texts edited, before
+   copying.
+5. **Download ZIP**: Jira texts (Markdown and wiki), the Slack message, the
+   title, `report.json`, the original screenshots and videos, the frames taken
+   from each video, and for every HAR a **redacted copy** plus a readable
+   summary.
+
+How the evidence is used:
+- **HAR files are read in the browser** and never uploaded. Their exact
+  status codes and error messages go to the AI as text, so the root cause is
+  based on the real failed requests, and the network error table in the Jira
+  and Slack texts comes straight from the file (not from the AI).
+- **Videos** stay in the browser too: a few frames spread through the
+  recording are sent to the AI as images (the model reads images, not video).
+- The AI sees at most 12 images: up to 8 screenshots when there are videos,
+  and up to 4 frames per video.
+- The redacted HAR has cookies, `Authorization`/token headers, and
+  password-, token- and card-like fields blanked out.
+
+### HAR reader
+**QA tools → HAR reader** opens a `.har` file (DevTools → Network → *Save all
+as HAR*) in the browser:
+
+- Totals (requests, failed, duration, data transferred) and the status code
+  mix (2xx, 3xx, 4xx, 5xx, no response).
+- **Failed requests**, most serious first (5xx, then no response, then 4xx),
+  with the error message the server sent back.
+- Every request in a table: filter by status or type, search the URL, with a
+  time bar. Click one for its headers, payload, response body and timings;
+  secrets are hidden unless you untick **Hide secrets**.
+- Download a **summary** (.md) or a **redacted HAR**, or **Create bug report**
+  to open the bug report tool with the file attached.
 
 ### Sign-in and users
 - **First run:** the first person to open the app creates the **admin**
@@ -509,6 +557,17 @@ screenshot downloads, which use their own one-time tokens. All routes are under
 | `GET /generations/:runId/refinements` | AI chat history of a batch, with each reply |
 | `POST /generations/:runId/callback`, `POST /generations/:runId/failure` | Used by n8n (one-time Bearer token) |
 
+Bug reports (`/api/bug-reports`, signed in; jobs are kept in memory for an
+hour and only their owner can read them):
+
+| Method and path | Purpose |
+|---|---|
+| `POST /api/bug-reports` | Multipart: `details` (JSON: description, steps, expected, environment, `harFacts`, `imageNotes`, `attachments`) and up to 12 `images`. Returns `202 { id }` |
+| `GET /api/bug-reports/:id` | `PENDING`, then `SUCCEEDED` with `report`, or `FAILED` with `error` |
+
+The server calls Ollama directly for bug reports (`OLLAMA_URL`, default
+`http://127.0.0.1:11434`; `OLLAMA_MODEL`, default `qwen3-vl:2b-instruct`).
+
 ## 6. Execution progress
 
 A test case counts as executed when its status is Passed, Failed or Blocked.
@@ -568,8 +627,8 @@ the filtered list.
 
 | Suite | Files | Tests |
 |---|---:|---:|
-| Server (`apps/server/tests`) | 14 | 209 |
-| Web (`apps/web/src/**/*.test.*`) | 15 | 124 |
+| Server (`apps/server/tests`) | 15 | 219 |
+| Web (`apps/web/src/**/*.test.*`) | 17 | 147 |
 
 Server tests run against a separate SQLite database (`test.db`) that is rebuilt
 on every run; n8n is mocked. Web tests mock the API with `mockApi` from
