@@ -61,7 +61,7 @@ describe("Image → Test cases tool", () => {
     await user.click(screen.getByRole("button", { name: "Negative" }));
     // The sidebar group toggle shares this label, so look inside the main area.
     await user.click(
-      within(screen.getByRole("main")).getByRole("button", { name: "Generate test cases" }),
+      within(screen.getByRole("main")).getByRole("button", { name: "Generate from 1 image" }),
     );
 
     expect(await screen.findByText("Test case generation started.")).toBeInTheDocument();
@@ -109,9 +109,57 @@ describe("Image → Test cases tool", () => {
       await screen.findByText("No images uploaded for this project yet."),
     ).toBeInTheDocument();
     expect(
-      within(screen.getByRole("main")).getByRole("button", { name: "Generate test cases" }),
+      within(screen.getByRole("main")).getByRole("button", { name: "Generate from 0 images" }),
     ).toBeDisabled();
     expect(screen.getByText("Upload at least one image to start.")).toBeInTheDocument();
+  });
+
+  it("pre-selects only new images and sends just those", async () => {
+    const user = userEvent.setup();
+    const mock = mockApi({
+      "GET /api/projects": projects,
+      "GET /api/projects/p1/evidence": evidence([
+        { ...image("e2", "new.png"), lastUsedAt: null },
+        { ...image("e1", "old.png"), lastUsedAt: "2026-01-01T10:00:00.000Z" },
+      ]),
+      "GET /api/projects/p1/generations?review=pending": { items: [], total: 0 },
+      "POST /api/projects/p1/generations": { data: { id: "run1", status: "PENDING" } },
+      "GET /api/projects/p1/generations/run1": { data: { id: "run1", status: "PENDING" } },
+    });
+
+    renderRoute("/tools/image-to-test-cases?project=p1");
+
+    expect(await screen.findByRole("checkbox", { name: "Use new.png" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Use old.png" })).not.toBeChecked();
+
+    await user.click(
+      within(screen.getByRole("main")).getByRole("button", { name: "Generate from 1 image" }),
+    );
+    await screen.findByText("Test case generation started.");
+    expect(mock.find("POST", "/api/projects/p1/generations")[0].body.evidenceIds).toEqual(["e2"]);
+  });
+
+  it("limits a generation to 20 images", async () => {
+    const user = userEvent.setup();
+    const many = Array.from({ length: 21 }, (_, i) => image(`e${i}`, `screen-${i}.png`));
+    mockApi({
+      "GET /api/projects": projects,
+      "GET /api/projects/p1/evidence": evidence(many),
+      "GET /api/projects/p1/generations?review=pending": { items: [], total: 0 },
+    });
+
+    renderRoute("/tools/image-to-test-cases?project=p1");
+
+    const generate = await within(await screen.findByRole("main")).findByRole("button", {
+      name: "Generate from 21 images",
+    });
+    expect(generate).toBeDisabled();
+    expect(screen.getByText("Select at most 20 images (21 selected).")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("checkbox", { name: "Use screen-0.png" }));
+    expect(
+      within(screen.getByRole("main")).getByRole("button", { name: "Generate from 20 images" }),
+    ).toBeEnabled();
   });
 
   it("asks you to create a project when there are none", async () => {

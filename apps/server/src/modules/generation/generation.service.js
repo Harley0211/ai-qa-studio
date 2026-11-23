@@ -2,9 +2,12 @@
 
 import { ApiError } from "../../lib/errors.js";
 import { createEvidenceSignature } from "../evidence/evidence.signing.js";
+import { findDuplicates } from "./duplicates.js";
 
 const CALLBACK_TOKEN_TTL_MS = 30 * 60 * 1000;
 const MAX_ERROR_LENGTH = 500;
+// Library titles sent to n8n so it skips scenarios that are already covered.
+export const MAX_EXISTING_TITLES = 300;
 export const TIMED_OUT_ERROR =
   "Timed out: n8n did not return test cases within 30 minutes";
 
@@ -56,6 +59,7 @@ function toDraftView(testCase, index) {
   };
 }
 
+// Reads a JSON array column (drafts, evidence ids); null if missing or invalid.
 function parseDrafts(value) {
   if (!value) return null;
 
@@ -189,6 +193,7 @@ export function createGenerationService({
         sectionTitle: source.sectionTitle ?? null,
         refinesRunId: source.refinesRunId ?? null,
         instruction: source.instruction ?? null,
+        evidenceIds: evidenceIds.length > 0 ? JSON.stringify(evidenceIds) : null,
       },
     });
 
@@ -240,6 +245,14 @@ export function createGenerationService({
       return { id, url };
     });
 
+    // What the library already covers, newest first, so n8n can leave it out.
+    const existing = await prisma.testCase.findMany({
+      where: { projectId },
+      orderBy: { createdAt: "desc" },
+      take: MAX_EXISTING_TITLES,
+      select: { title: true },
+    });
+
     return submitToN8n(run, {
       mode: "GENERATE",
       runId: run.id,
@@ -248,6 +261,7 @@ export function createGenerationService({
       generationFormat,
       evidenceIds,
       evidence: evidencePayload,
+      existingTitles: existing.map(({ title }) => title),
       callbackUrl,
       callbackToken,
     });
@@ -454,10 +468,27 @@ export function createGenerationService({
     const now = new Date();
 
     return prisma.$transaction(async (tx) => {
-      const { refinesRunId } = await consumeCallbackToken(tx, projectId, runId, token, now);
+      const { refinesRunId, evidenceIds } = await consumeCallbackToken(
+        tx,
+        projectId,
+        runId,
+        token,
+        now,
+      );
 
       if (refinesRunId) {
         return applyRefinement(tx, { projectId, runId, refinesRunId, testCases, summary, now });
+      }
+
+      // The images this run looked at are no longer "new".
+      const usedIds = (parseDrafts(evidenceIds) ?? []).filter(
+        (id) => typeof id === "string",
+      );
+      if (usedIds.length > 0) {
+        await tx.evidence.updateMany({
+          where: { projectId, id: { in: usedIds } },
+          data: { lastUsedAt: now },
+        });
       }
 
       // Keep the cases as drafts; they become test cases only when accepted.
@@ -553,8 +584,22 @@ export function createGenerationService({
       ...rest,
       source: toSource({ documentId, sectionTitle, document }),
       reviewStatus: drafts ? "PENDING_REVIEW" : run.reviewedAt ? "REVIEWED" : null,
-      drafts: drafts ? drafts.map(toDraftView) : null,
+      drafts: drafts ? await withDuplicates(projectId, drafts.map(toDraftView)) : null,
     };
+  }
+
+  // Marks each draft that repeats a test case already in the library.
+  async function withDuplicates(projectId, drafts) {
+    if (drafts.length === 0) return drafts;
+
+    const library = await prisma.testCase.findMany({
+      where: { projectId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, caseId: true, title: true },
+    });
+    const matches = findDuplicates(drafts, library);
+
+    return drafts.map((draft, i) => ({ ...draft, duplicateOf: matches[i] }));
   }
 
   async function listPendingReviews(projectId) {

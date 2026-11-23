@@ -43,6 +43,14 @@ export function evidenceRouter({
     }),
   );
 
+  // Delete every image already used by a finished generation.
+  router.post(
+    "/clear-used",
+    asyncHandler(async (req, res) => {
+      res.json({ data: await service.removeUsed(req.params.projectId) });
+    }),
+  );
+
   // Existing evidence download endpoint.
   router.get(
     "/:evidenceId/file",

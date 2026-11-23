@@ -22,6 +22,13 @@ import {
   buildGenerationMessage,
   useGenerationFlow,
 } from "./generation.hooks.js";
+import {
+  ClearUsedButton,
+  EvidenceStatusBadge,
+  SelectionBar,
+  selectionProblem,
+  useEvidenceSelection,
+} from "./EvidenceSelection.jsx";
 import { FormatPicker } from "./GenerationOptions.jsx";
 import { PendingReviewBanner } from "./GenerationReview.jsx";
 import { validateImageFile } from "./upload.js";
@@ -56,6 +63,8 @@ export default function EvidenceTab() {
 
   const items = data?.items ?? [];
   const isGenerating = generation.isGenerating;
+  const selection = useEvidenceSelection(items);
+  const problem = selectionProblem(selection, items.length);
 
   async function handleFile(file) {
     if (!file) return;
@@ -86,29 +95,18 @@ export default function EvidenceTab() {
   }
 
   async function handleGenerate() {
-    if (items.length === 0) {
-      toast.error("Upload at least one image before generating test cases.");
+    if (problem) {
+      toast.error(problem);
       return;
     }
-
-    const evidenceIds = items
-      .slice(0, MAX_GENERATION_EVIDENCE)
-      .map((item) => item.id);
 
     try {
       await generation.start({
         message: buildGenerationMessage(),
-        evidenceIds,
+        evidenceIds: selection.selectedIds,
         generationFormat,
       });
-
-      if (items.length > MAX_GENERATION_EVIDENCE) {
-        toast.success(
-          `Generation started using the first ${MAX_GENERATION_EVIDENCE} images.`,
-        );
-      } else {
-        toast.success("Test case generation started.");
-      }
+      toast.success("Test case generation started.");
     } catch (err) {
       toast.error(err.message || "Unable to start test case generation.");
     }
@@ -200,8 +198,10 @@ export default function EvidenceTab() {
               Generate test cases
             </h3>
             <p className="mt-1 text-sm text-slate-600">
-              Analyze your uploaded screenshots with AI and create test cases.
-              Maximum 20 images per generation.
+              Analyze the selected screenshots with AI and create test cases.
+              New images are selected for you; test cases already in the
+              library are skipped. Maximum {MAX_GENERATION_EVIDENCE} images per
+              generation.
             </p>
 
             <div className="mt-3 max-w-xl">
@@ -219,12 +219,17 @@ export default function EvidenceTab() {
           <Button
             icon={Sparkles}
             loading={isGenerating}
-            disabled={items.length === 0 || isGenerating}
+            disabled={Boolean(problem) || isGenerating}
             onClick={handleGenerate}
           >
-            Generate Test Cases
+            Generate from {selection.selectedItems.length}{" "}
+            {selection.selectedItems.length === 1 ? "image" : "images"}
           </Button>
         </div>
+
+        {problem && items.length > 0 && (
+          <p className="mt-3 text-sm text-slate-600">{problem}</p>
+        )}
 
         {generation.isWaiting && (
           <p role="status" className="mt-3 text-sm text-indigo-700">
@@ -252,24 +257,45 @@ export default function EvidenceTab() {
         />
       ) : (
         <div>
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-900">
-              Uploaded images
-            </h3>
-            <span className="text-xs text-slate-500">
-              {data.total} {data.total === 1 ? "image" : "images"}
-            </span>
+          <div className="mb-3 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-slate-900">
+                Uploaded images
+              </h3>
+              <ClearUsedButton
+                projectId={project.id}
+                usedCount={selection.usedCount}
+                disabled={isGenerating}
+              />
+            </div>
+            <SelectionBar
+              selection={selection}
+              total={items.length}
+              disabled={isGenerating}
+            />
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {items.map((item) => {
               const imageUrl = `/api/projects/${project.id}/evidence/${item.id}/file`;
 
+              const checked = selection.isSelected(item.id);
+
               return (
                 <article
                   key={item.id}
-                  className="overflow-hidden rounded-xl border border-slate-200 bg-white"
+                  className={`relative overflow-hidden rounded-xl border-2 bg-white ${
+                    checked ? "border-indigo-600" : "border-slate-200"
+                  }`}
                 >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={isGenerating}
+                    onChange={() => selection.toggle(item.id)}
+                    aria-label={`Use ${item.filename} for generation`}
+                    className="absolute left-3 top-3 z-10 h-5 w-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600"
+                  />
                   <button
                     type="button"
                     onClick={() => setPreview(item)}
@@ -292,8 +318,9 @@ export default function EvidenceTab() {
                       >
                         {item.filename}
                       </p>
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                         {formatFileSize(item.fileSize)}
+                        <EvidenceStatusBadge item={item} />
                       </p>
                       <p className="mt-1 text-xs text-slate-400">
                         {formatDate(item.createdAt)}

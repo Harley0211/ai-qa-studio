@@ -5,7 +5,7 @@ requirements documents (PRDs) into test cases with a local AI model, lets you
 review and refine them before they are saved, and then manage, run and export
 them per project. Team members sign in; everyone works on all projects.
 
-**Status (22 Nov 2026):** 301 automated tests pass (197 server, 104 web) and the
+**Status (23 Nov 2026):** 318 automated tests pass (208 server, 110 web) and the
 production build succeeds.
 
 ---
@@ -24,13 +24,28 @@ production build succeeds.
 ### Generate test cases from screenshots
 **Tools → From image evidence** (or *Open tool* on the Overview):
 
-1. Upload PNG, JPG or WEBP screenshots (up to 5 MB each; the first 20 are used).
-2. Choose the result format: **Overall expected result** (one per test case) or
+1. Upload PNG, JPG or WEBP screenshots (up to 5 MB each).
+2. Tick the images to generate from (up to 20). Each image is marked **New** or
+   **Used · date**. New images are selected for you and used ones are not, so
+   in a project that already has evidence and test cases you just upload the
+   new screens and generate: nothing has to be cleared first. *Select new
+   only*, *Select all* and *Clear selection* change the selection quickly.
+3. Choose the result format: **Overall expected result** (one per test case) or
    **Expected result per step**.
-3. Optionally choose a focus: Functional, Negative, Boundary, Validation,
+4. Optionally choose a focus: Functional, Negative, Boundary, Validation,
    UI / layout.
-4. Generate. The local model takes a few minutes; the results then wait for
+5. Generate. The local model takes a few minutes; the results then wait for
    review.
+
+An image counts as used once a generation that included it has finished
+successfully (a failed run leaves it new). **Clear used images** deletes every
+used image in one step, after confirming; new images and all test cases are
+kept, and images a running generation still needs are skipped.
+
+**No repeats of the library:** the titles of the project's existing test cases
+are sent with every generation. The model is told not to list them again, and
+the workflow drops any scenario that still matches one. If everything in the
+selected images is already covered, the run fails with a message saying so.
 
 ### Generate test cases from a PRD or document
 **Tools → From PRD / document**, or the project's **Documents** tab:
@@ -51,6 +66,9 @@ reviewed:
 - The tool pages list every batch waiting for review. All cases start selected;
   untick the ones you don't want and click **Add N to library**, or **Discard
   all**.
+- A draft whose title matches a test case already in the library is labelled
+  **Possible duplicate of TC-0012** and starts unselected. Tick it to keep it
+  anyway.
 - Test case IDs (`TC-0001`, …) are assigned only when cases are accepted, so
   discarded drafts leave no gaps.
 - The Evidence and Test cases tabs show a banner while batches are waiting.
@@ -224,6 +242,52 @@ Notes:
 - Quick tunnels are meant for testing and small use; Cloudflare gives no uptime
   guarantee for them.
 
+### Staging (try changes without touching the live app)
+
+Staging is a second copy of the code (a git worktree on the `staging` branch)
+with its own database, screenshots, port and n8n webhook. It shares Ollama and
+the n8n program with live.
+
+| | Live | Staging |
+|---|---|---|
+| Folder / branch | `ai-qa-studio` / `main` | `ai-qa-studio-staging` / `staging` |
+| Address | http://127.0.0.1:4000 (+ tunnel) | http://127.0.0.1:4100 (local only) |
+| Database | `prisma/dev.db` | `prisma/staging.db` |
+| n8n webhook | `ai-qa-studio/generate` | `ai-qa-studio-staging/generate` |
+
+**Set up** (once, from the live folder):
+
+```powershell
+git worktree add ..\ai-qa-studio-staging -b staging
+copy apps\server\prisma\dev.db ..\ai-qa-studio-staging\apps\server\prisma\staging.db
+cd ..\ai-qa-studio-staging
+npm install
+```
+
+Create `apps\server\.env` there from live's, changing `PORT=4100`,
+`DATABASE_URL="file:./staging.db"`, `PUBLIC_BACKEND_URL=http://127.0.0.1:4100`,
+`CORS_ORIGIN` (add `http://127.0.0.1:4100`), `PUBLIC_HOSTS=` (empty: no
+tunnel) and `N8N_WEBHOOK_URL=http://localhost:5678/webhook/ai-qa-studio-staging/generate`.
+
+**n8n:** import a copy of the workflow with its own name, webhook address and
+webhook id, so it never replaces the live one. Create it with
+`node n8n/make-staging-workflow.mjs` (writes
+`n8n/staging/ai-qa-studio-generation.STAGING.workflow.json`), then import that
+file in n8n, choose the same Header Auth credential and activate it.
+
+**Run:** `npm run db:migrate`, `npm run build`, `npm run dev:server`, then open
+http://127.0.0.1:4100.
+
+**Release to live** after testing on staging:
+
+1. Merge: in the live folder, `git merge staging`, then `git push`.
+2. Stop the live server, then `npm install`, `npm run db:generate`,
+   `npm run db:migrate`, `npm run build`, and start it again. The tunnel can
+   keep running.
+3. If `n8n/ai-qa-studio-generation.workflow.json` changed, import it in n8n
+   over the live workflow (or delete the old one first), set its credential
+   and activate it.
+
 ### Run it live on another computer (step by step, e.g. the office PC)
 
 Everything below is typed in **PowerShell** on the other computer unless it
@@ -394,7 +458,8 @@ locally.
 
 | What | Limit |
 |---|---|
-| Screenshot upload | 5 MB per image (`MAX_UPLOAD_MB`); first 20 images per run |
+| Screenshot upload | 5 MB per image (`MAX_UPLOAD_MB`); up to 20 selected images per run |
+| Library titles sent to n8n | Newest 300 (the model sees the newest 60; the workflow checks all 300) |
 | Document upload | 10 MB; up to 200,000 characters of text |
 | Pasted document | 60,000 characters |
 | Sections per generation | 10 (each section is its own run) |
@@ -422,12 +487,13 @@ screenshot downloads, which use their own one-time tokens. All routes are under
 |---|---|
 | `GET /test-cases`, `POST /test-cases`, `PATCH`/`DELETE /test-cases/:id` | Test case library |
 | `PATCH /test-cases/:id/status`, `PATCH /test-cases/bulk/status`, `DELETE /test-cases/bulk` | Execution status and bulk actions |
-| `GET`/`POST /evidence`, `DELETE /evidence/:id` | Screenshots |
+| `GET`/`POST /evidence`, `DELETE /evidence/:id` | Screenshots (each with `lastUsedAt`, null while new) |
+| `POST /evidence/clear-used` | Delete every used screenshot (`{ deletedCount }`) |
 | `GET`/`POST /documents`, `POST /documents/upload`, `GET`/`DELETE /documents/:id` | Documents (paste or upload) |
 | `POST /documents/:id/generations` | Generate from selected sections |
 | `POST /generations` | Generate from screenshots |
 | `GET /generations?review=pending` | Batches waiting for review |
-| `GET /generations/:runId` | Run status, drafts and source |
+| `GET /generations/:runId` | Run status, drafts (each with `duplicateOf`) and source |
 | `POST /generations/:runId/accept`, `POST /generations/:runId/discard` | Review a batch |
 | `POST /generations/:runId/refine` | AI chat: ask for a change to a batch (`{ instruction }`) |
 | `GET /generations/:runId/refinements` | AI chat history of a batch, with each reply |
@@ -475,6 +541,13 @@ the filtered list.
 - **Phase 5 (sign-in and users):** first-run admin setup, sign-in/out,
   admin Users page, change password; every API route needs a sign-in;
   migration `add_users`.
+- **Generating again in a busy project** (no more clearing evidence and test
+  cases first): pick which images to use, with new ones pre-selected and used
+  ones marked; existing library titles are sent to n8n and repeats are
+  dropped; drafts that match a library case are flagged and start
+  unselected; *Clear used images* in one step. Migration
+  `track_evidence_use` (marks images used by earlier successful image runs);
+  n8n workflow updated (import it again).
 
 ### Earlier
 - Test case management: library, details, create/edit, execution status,
@@ -485,8 +558,8 @@ the filtered list.
 
 | Suite | Files | Tests |
 |---|---:|---:|
-| Server (`apps/server/tests`) | 13 | 197 |
-| Web (`apps/web/src/**/*.test.*`) | 14 | 104 |
+| Server (`apps/server/tests`) | 14 | 208 |
+| Web (`apps/web/src/**/*.test.*`) | 14 | 110 |
 
 Server tests run against a separate SQLite database (`test.db`) that is rebuilt
 on every run; n8n is mocked. Web tests mock the API with `mockApi` from

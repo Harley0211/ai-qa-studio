@@ -85,6 +85,35 @@ describe("Reviewing generated test cases", () => {
     expect(within(review).getByText("Per step")).toBeInTheDocument();
   });
 
+  it("leaves likely repeats of library test cases unselected", async () => {
+    const user = userEvent.setup();
+    const duplicate = { id: "tc1", caseId: "TC-0007", title: "Login with valid credentials" };
+    const mock = mockReview({
+      "GET /api/projects/p1/generations/run1": {
+        data: {
+          id: "run1",
+          status: "SUCCEEDED",
+          reviewStatus: "PENDING_REVIEW",
+          drafts: [{ ...drafts[0], duplicateOf: duplicate }, { ...drafts[1], duplicateOf: null }],
+        },
+      },
+    });
+    const review = await openReview();
+
+    expect(await within(review).findByText("Possible duplicate of TC-0007")).toBeInTheDocument();
+    expect(
+      within(review).getByRole("checkbox", { name: "Select Login with valid credentials" }),
+    ).not.toBeChecked();
+    expect(
+      within(review).getByRole("checkbox", { name: "Select Login with wrong password" }),
+    ).toBeChecked();
+    expect(within(review).getByText(/1 possible duplicate was left unselected/)).toBeInTheDocument();
+
+    await user.click(within(review).getByRole("button", { name: "Add 1 to library" }));
+    await screen.findByText("1 test case added to the library.");
+    expect(mock.find("POST", "/api/projects/p1/generations/run1/accept")[0].body.indexes).toEqual([1]);
+  });
+
   it("shows per-step drafts as a step table", async () => {
     const user = userEvent.setup();
     mockReview();

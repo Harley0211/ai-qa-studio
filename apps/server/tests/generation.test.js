@@ -37,11 +37,17 @@ function createPrismaMock() {
     testCase: {
       createMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
+    evidence: {
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
   };
 
   return {
     project: {
       findUnique: vi.fn().mockResolvedValue({ id: "project-1" }),
+    },
+    testCase: {
+      findMany: vi.fn().mockResolvedValue([]),
     },
     evidence: {
       findMany: vi.fn().mockResolvedValue([{ id: "evidence-1" }]),
@@ -194,6 +200,11 @@ describe("Generation service", () => {
     expect(signature).toMatch(/^[a-f0-9]{64}$/);
     expect(payload.callbackUrl).toContain("/generations/run-1/callback");
     expect(payload.callbackToken).toHaveLength(64);
+    expect(payload.existingTitles).toEqual([]);
+    // The run remembers which images it used.
+    expect(prisma.generationRun.create.mock.calls[0][0].data.evidenceIds).toBe(
+      JSON.stringify(["evidence-1"]),
+    );
   });
 
   it("marks generation as failed when n8n request fails", async () => {

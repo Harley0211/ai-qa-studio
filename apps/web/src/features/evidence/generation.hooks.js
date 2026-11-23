@@ -9,6 +9,7 @@ import { useToast } from "../../components/ui/Toast.jsx";
 import { api } from "../../lib/apiClient.js";
 import { projectKeys } from "../projects/hooks.js";
 import { testCaseKeys } from "../projects/test-cases.hooks.js";
+import { evidenceKeys } from "./hooks.js";
 
 export const MAX_GENERATION_EVIDENCE = 20;
 
@@ -234,6 +235,8 @@ export function useGenerationFlow(projectId) {
       queryClient.invalidateQueries({
         queryKey: generationKeys.pendingReview(projectId),
       });
+      // The images this run used now show as used.
+      queryClient.invalidateQueries({ queryKey: evidenceKeys.all(projectId) });
       toast.success("Test cases are ready to review.");
       setRunId(null);
     }

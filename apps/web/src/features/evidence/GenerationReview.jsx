@@ -42,8 +42,12 @@ function ReviewBatch({ projectId, run, onAccepted }) {
   });
 
   const drafts = data?.data?.drafts ?? [];
-  // Everything is selected until the user changes the selection.
-  const selection = selected ?? new Set(drafts.map((draft) => draft.index));
+  const duplicateCount = drafts.filter((draft) => draft.duplicateOf).length;
+  // Everything except likely repeats of library test cases is selected until
+  // the user changes the selection.
+  const selection =
+    selected ??
+    new Set(drafts.filter((draft) => !draft.duplicateOf).map((draft) => draft.index));
   const busy = accept.isPending || discard.isPending || chat.isRefining;
   const allSelected = drafts.length > 0 && selection.size === drafts.length;
 
@@ -135,6 +139,14 @@ function ReviewBatch({ projectId, run, onAccepted }) {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-semibold text-slate-900">{draft.title}</span>
                   <FormatChip testCase={draft} />
+                  {draft.duplicateOf && (
+                    <span
+                      className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800"
+                      title={`Already in the library: ${draft.duplicateOf.caseId} · ${draft.duplicateOf.title}`}
+                    >
+                      Possible duplicate of {draft.duplicateOf.caseId}
+                    </span>
+                  )}
                 </div>
                 {draft.description && (
                   <p className="mt-1 text-sm text-slate-600">{draft.description}</p>
@@ -160,6 +172,8 @@ function ReviewBatch({ projectId, run, onAccepted }) {
       <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-3">
         <p className="text-xs text-slate-500">
           Unselected test cases are discarded.
+          {duplicateCount > 0 &&
+            ` ${plural(duplicateCount, "possible duplicate was", "possible duplicates were")} left unselected; tick them to keep them anyway.`}
         </p>
         <div className="flex flex-wrap gap-2">
           <Button
