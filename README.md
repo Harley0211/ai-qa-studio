@@ -6,7 +6,7 @@ review and refine them before they are saved, and then manage, run and export
 them per project. Team members sign in; admins open every project, testers
 open the projects an admin assigned to them.
 
-**Status (24 Nov 2026):** 436 automated tests pass (248 server, 188 web) and the
+**Status (24 Nov 2026):** 462 automated tests pass (266 server, 196 web) and the
 production build succeeds.
 
 ---
@@ -239,8 +239,14 @@ refuses uploads over 100 MB.
 - **Users page (admins):** search, filters *All / Admins / Testers /
   Disabled*, and per person their role, projects ("All projects" or "2 of 4")
   and status: **Active**, **Invited** (added by an admin, never signed in) or
-  **Disabled**. Each row has *Assign projects* (or *Enable*) and a menu:
-  Assign projects, Reset password, Change role, Disable/Enable, Remove.
+  **Disabled** (or *Invitation expired*). Each row has *Assign projects* (or
+  *Enable*) and a menu: Assign projects, Resend invitation (invited people),
+  Reset password, Change role, Disable/Enable, Remove.
+- **Add user = invite by email:** the admin enters name, email, role and (for
+  a tester) the projects they can open. The person gets an invitation email
+  with an **Accept invitation** button (works once, for 7 days) where they
+  choose their own password; no password is typed by the admin or sent by
+  email. *Resend invitation* sends a new link (the old one stops working).
 - **Assign projects to a person** (`/users/<id>`): edit their name, email,
   role (Admin/Tester) and *Account active*, switch projects on or off (*Select
   all · Clear*), then **Save access**. A disabled account is signed out at
@@ -250,6 +256,21 @@ refuses uploads over 100 MB.
 - **Upgrading:** the database update gives every existing tester access to
   every existing project, so nobody loses access; admins then remove what
   each tester shouldn't see.
+
+### Emails
+- People get a designed email when they are **invited**, **sign up**
+  (welcome), are **given or removed from a project** (one email per save,
+  listing the projects, from the person's page or a project's *Assign users*),
+  and when their account is **disabled, enabled again or removed**. Someone
+  still invited gets no project emails: their invitation lists their projects.
+- The app writes the emails; the n8n workflow **AI QA Studio - Send email**
+  sends them through Gmail (set-up: [n8n/README.md](n8n/README.md#set-up-gmail-once-per-machine)).
+- Sending never blocks the change: if Gmail or n8n fails, or email isn't set up
+  yet, the change is saved and the message says so. **Admin → Emails** lists
+  every email (Sent / Failed / Not sent, with the reason) with **Retry**.
+- Links in emails use `PUBLIC_APP_URL` if set, otherwise the address the admin
+  is using (e.g. the public tunnel link). A quick tunnel's address changes when
+  it restarts, so links in older emails then stop working; resend if needed.
 
 ### Other
 - **Dark mode:** toggle in the sidebar (or the top bar on small screens). The
@@ -625,8 +646,11 @@ Sign-in (`/api/auth`) and users (`/api/users`, admins only):
 | `POST /api/auth/register` | Create your own tester account (`storedLocally: true` required) |
 | `POST /api/auth/login`, `POST /api/auth/logout` | Sign in (`remember`) / out (session cookie) |
 | `POST /api/auth/password` | Change your own password |
-| `GET`/`POST /api/users`, `GET`/`PATCH`/`DELETE /api/users/:id` | Manage users (admin); each has `status` and `projectIds`. `PATCH` takes `name`, `email`, `role`, `active`, `password`, `projectIds` |
+| `GET /api/auth/invitations/:token`, `POST /api/auth/invitations/:token/accept` | Open an invitation link; accept it with `{ password }` (signs in) |
+| `GET`/`POST /api/users`, `GET`/`PATCH`/`DELETE /api/users/:id` | Manage users (admin); each has `status`, `invitation` and `projectIds`. `POST` without `password` sends an invitation. `PATCH` takes `name`, `email`, `role`, `active`, `password`, `projectIds`. Answers include `emails` (what was sent) |
+| `POST /api/users/:id/invitation` | Send a new invitation link (admin) |
 | `GET`/`PUT /api/projects/:id/members` | Testers assigned to a project (admin, `{ userIds }`) |
+| `GET /api/emails`, `POST /api/emails/:id/retry` | Email log and retry (admin) |
 
 `GET /api/projects` gives admins every project (`access: "ADMIN"`, with
 `memberCount`) and testers their assigned projects (`"ASSIGNED"`) plus the

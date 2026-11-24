@@ -3,7 +3,14 @@ import { asyncHandler } from "../../lib/asyncHandler.js";
 import { ApiError } from "../../lib/errors.js";
 import { unauthenticated } from "./auth.middleware.js";
 import { burnPasswordCheck, hashPassword, verifyPassword } from "./auth.passwords.js";
-import { changePasswordSchema, loginSchema, registerSchema, setupSchema } from "./auth.schemas.js";
+import { createNotifier, hashInviteToken } from "../email/notifications.js";
+import {
+  acceptInvitationSchema,
+  changePasswordSchema,
+  loginSchema,
+  registerSchema,
+  setupSchema,
+} from "./auth.schemas.js";
 import { publicUser } from "./auth.sessions.js";
 
 const MAX_FAILED_LOGINS = 10;
@@ -68,10 +75,52 @@ function createLoginThrottle() {
   };
 }
 
-export function authRouter({ prisma, sessions, allowSignup = true }) {
+const invalidInvitation = () =>
+  new ApiError(
+    404,
+    "INVITATION_INVALID",
+    "This invitation link is invalid, already used or expired. Ask an admin to send a new one.",
+  );
+
+export function authRouter({ prisma, sessions, allowSignup = true, mail }) {
   const router = Router();
   const throttle = createLoginThrottle();
   const signups = createSignupLimit();
+  const notify = mail ? createNotifier({ prisma, mail }) : null;
+
+  // The person an invitation link belongs to, if the link still works.
+  async function invitedUser(token) {
+    if (!/^[a-f0-9]{64}$/.test(token)) throw invalidInvitation();
+    const user = await prisma.user.findUnique({ where: { inviteTokenHash: hashInviteToken(token) } });
+    if (!user || !user.active || !user.inviteExpiresAt || user.inviteExpiresAt <= new Date()) throw invalidInvitation();
+    return user;
+  }
+
+  // Opening an invitation link: who it is for.
+  router.get(
+    "/invitations/:token",
+    asyncHandler(async (req, res) => {
+      const user = await invitedUser(req.params.token);
+      res.json({ name: user.name, email: user.email, role: user.role });
+    }),
+  );
+
+  // Accepting it: choose a password, then you're signed in. The link stops
+  // working.
+  router.post(
+    "/invitations/:token/accept",
+    asyncHandler(async (req, res) => {
+      const { password } = acceptInvitationSchema.parse(req.body ?? {});
+      const user = await invitedUser(req.params.token);
+      const updated = await prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash: await hashPassword(password), inviteTokenHash: null, inviteExpiresAt: null },
+      });
+      await sessions.destroyAllFor(user.id);
+      await sessions.create(req, res, user.id, { remember: false });
+      res.json({ user: publicUser({ ...updated, lastLoginAt: new Date() }) });
+    }),
+  );
 
   // Who is signed in, whether the first admin still has to be created, and
   // whether visitors can create their own (tester) account.
@@ -113,7 +162,8 @@ export function authRouter({ prisma, sessions, allowSignup = true }) {
       });
 
       await sessions.create(req, res, user.id, { remember: false });
-      res.status(201).json({ user: publicUser({ ...user, lastLoginAt: new Date() }) });
+      const emails = notify ? [await notify.welcome(req, user)] : [];
+      res.status(201).json({ user: publicUser({ ...user, lastLoginAt: new Date() }), emails });
     }),
   );
 

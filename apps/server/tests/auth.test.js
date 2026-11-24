@@ -309,7 +309,7 @@ describe("Managing users (admin)", () => {
     const user = await createUser();
     const cookie = cookieValue(sessionCookieFrom(await login()));
 
-    expect((await usersApi().delete(`/api/users/${user.id}`)).status).toBe(204);
+    expect((await usersApi().delete(`/api/users/${user.id}`)).status).toBe(200);
     expect(await prisma.user.findUnique({ where: { id: user.id } })).toBeNull();
     expect((await anonymousApi().get("/api/projects").set("Cookie", cookie)).status).toBe(401);
 

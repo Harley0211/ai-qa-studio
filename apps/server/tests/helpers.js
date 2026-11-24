@@ -13,10 +13,15 @@ export const n8nClient = {
   }),
 };
 
+// Records the emails the app would send (n8n and Gmail aren't called).
+export const emailSender = { send: vi.fn().mockResolvedValue(undefined) };
+export const sentEmails = () => emailSender.send.mock.calls.map(([message]) => message);
+
 export const app = createApp({
   prisma,
   env,
   n8nClient,
+  emailSender,
 });
 
 // Requests from a browser that is signed in as the test admin (created by
@@ -83,6 +88,9 @@ export async function resetDb() {
   await prisma.project.deleteMany();
   await prisma.session.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.emailMessage.deleteMany();
+  emailSender.send.mockReset();
+  emailSender.send.mockResolvedValue(undefined);
 
   sessionCookie = (await createSignedInUser({ ...TEST_ADMIN, role: "ADMIN" })).cookie;
 

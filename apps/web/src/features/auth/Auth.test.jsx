@@ -371,29 +371,60 @@ describe("Users page (admin)", () => {
     expect(within(table).queryByText("Maria Santos")).not.toBeInTheDocument();
   });
 
-  it("adds a tester, then opens their project access", async () => {
+  it("invites a tester by email with their projects, without typing a password", async () => {
     const user = userEvent.setup();
     const mock = mockUsers({
-      "GET /api/users/u9": () => ({ data: person({ id: "u9", name: "Nina New", email: "nina@example.com" }) }),
-      "GET /api/projects": { items: [project({ id: "p1", name: "PNCC", access: "ADMIN" })], total: 1 },
+      "GET /api/projects": {
+        items: [project({ id: "p1", name: "PNCC", access: "ADMIN" }), project({ id: "p2", name: "Fiber", access: "ADMIN" })],
+        total: 2,
+      },
+      "POST /api/users": (call) => ({
+        data: person({ id: "u9", ...call.body, status: "INVITED", invitation: "PENDING" }),
+        emails: [{ to: "nina@example.com", kind: "INVITATION", status: "SENT" }],
+      }),
     });
     renderRoute("/users");
 
     await user.click(await screen.findByRole("button", { name: "Add user" }));
     const dialog = screen.getByRole("dialog", { name: "Add user" });
+    expect(within(dialog).queryByLabelText("Password")).not.toBeInTheDocument();
     await user.type(within(dialog).getByLabelText("Name"), "Nina New");
     await user.type(within(dialog).getByLabelText("Email"), "nina@example.com");
-    await user.type(within(dialog).getByLabelText("Password"), "welcome 123");
     expect(within(dialog).getByRole("radio", { name: "Tester" })).toHaveAttribute("aria-checked", "true");
-    await user.click(within(dialog).getByRole("button", { name: "Add user" }));
+    await user.click(await within(dialog).findByRole("switch", { name: "Access to Fiber" }));
+    await user.click(within(dialog).getByRole("button", { name: "Send invitation" }));
 
-    expect(await screen.findByRole("heading", { name: "Assign projects to Nina New" })).toBeInTheDocument();
+    expect(await screen.findByText("Invited Nina New. Email sent to nina@example.com.")).toBeInTheDocument();
     expect(mock.find("POST", "/api/users")[0].body).toEqual({
       name: "Nina New",
       email: "nina@example.com",
-      password: "welcome 123",
       role: "MEMBER",
+      projectIds: ["p2"],
     });
+  });
+
+  it("says when an email couldn't be sent, and resends invitations", async () => {
+    const user = userEvent.setup();
+    const mock = mockUsers({
+      "POST /api/users/u3/invitation": {
+        data: person({ id: "u3", status: "INVITED" }),
+        emails: [{ to: "jun@example.com", kind: "INVITATION", status: "FAILED", error: "Invalid login" }],
+      },
+    });
+    renderRoute("/users");
+
+    await user.click(await screen.findByRole("button", { name: "More actions for Jun Reyes" }));
+    await user.click(screen.getByRole("menuitem", { name: "Resend invitation" }));
+
+    expect(await screen.findByText("New invitation for Jun Reyes. The old link no longer works.")).toBeInTheDocument();
+    expect(
+      screen.getByText("The email to jun@example.com couldn't be sent (Invalid login). Retry it from Admin → Emails."),
+    ).toBeInTheDocument();
+    expect(mock.find("POST", "/api/users/u3/invitation")).toHaveLength(1);
+
+    // Only invited people have it.
+    await user.click(screen.getByRole("button", { name: "More actions for Maria Santos" }));
+    expect(screen.queryByRole("menuitem", { name: "Resend invitation" })).not.toBeInTheDocument();
   });
 
   it("shows field errors from the server", async () => {
@@ -410,8 +441,7 @@ describe("Users page (admin)", () => {
     const dialog = screen.getByRole("dialog", { name: "Add user" });
     await user.type(within(dialog).getByLabelText("Name"), "Max Again");
     await user.type(within(dialog).getByLabelText("Email"), "maria@example.com");
-    await user.type(within(dialog).getByLabelText("Password"), "welcome 123");
-    await user.click(within(dialog).getByRole("button", { name: "Add user" }));
+    await user.click(within(dialog).getByRole("button", { name: "Send invitation" }));
 
     expect(await within(dialog).findByText("A user with this email already exists")).toBeInTheDocument();
   });

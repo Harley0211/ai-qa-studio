@@ -61,3 +61,40 @@ marked failed instead of waiting.
 
 After changing the workflow in n8n, export it again (*⋯ → Download*) and
 replace the JSON here, or ask for it to be re-exported through the n8n API.
+
+---
+
+# n8n workflow: AI QA Studio - Send email
+
+`ai-qa-studio-email.workflow.json` delivers the app's emails (invitations,
+project access added/removed, account disabled/enabled/removed, welcome). The
+app writes each designed email itself; this workflow only sends it through
+Gmail, so the Gmail password lives in n8n and never in the app.
+
+**Webhook** (`ai-qa-studio/email`, same Header Auth credential as above) →
+**Send Email** (SMTP) → **Sent** (200 `{ ok: true }`) or, if sending fails,
+**Not sent** (502 `{ ok: false, error }`). The app records the result; admins
+see it under *Admin → Emails* and can retry.
+
+`node n8n/make-email-workflow.mjs` rewrites this file and a staging copy
+(`n8n/staging/…STAGING.workflow.json`, webhook `ai-qa-studio-staging/email`).
+
+## Set up Gmail (once per machine)
+
+1. **Gmail app password:** on the Google account that will send the emails,
+   turn on 2-Step Verification, then open https://myaccount.google.com/apppasswords,
+   create an app password called "AI QA Studio" and copy the 16 characters.
+2. **Import** the workflow in n8n (*Workflows → Import from File*). On staging
+   import the STAGING copy instead.
+3. **SMTP credential:** open the **Send Email** node → *Credential* → *Create
+   new* (type SMTP), name it `Gmail SMTP`:
+   - User: the Gmail address · Password: the 16-character app password
+   - Host: `smtp.gmail.com` · Port: `465` · SSL/TLS: on
+4. **Activate / publish** the workflow (n8n refuses until step 3 is done).
+5. **Server `.env`** (`apps/server/.env`):
+   - `N8N_EMAIL_WEBHOOK_URL=http://localhost:5678/webhook/ai-qa-studio/email`
+     (staging: `…/webhook/ai-qa-studio-staging/email`)
+   - `EMAIL_FROM=AI QA Studio <the same Gmail address>`
+   - optional `PUBLIC_APP_URL=` the app's public address for links in emails
+     (when empty, links use the address the admin is using at that moment)
+6. Restart the server, then retry any *Not sent* emails from *Admin → Emails*.

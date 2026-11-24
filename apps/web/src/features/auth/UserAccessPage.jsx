@@ -4,7 +4,7 @@ import { Button } from "../../components/ui/Button.jsx";
 import { ErrorState, LoadingState } from "../../components/ui/States.jsx";
 import { Badge, Switch } from "../../components/ui/Switch.jsx";
 import { TextField } from "../../components/ui/TextField.jsx";
-import { useToast } from "../../components/ui/Toast.jsx";
+import { useEmailToast } from "../emails/emailOutcome.js";
 import NotFoundPage from "../../app/NotFoundPage.jsx";
 import { useProjects } from "../projects/hooks.js";
 import { useCurrentUser, useUpdateUser, useUser } from "./auth.hooks.js";
@@ -32,7 +32,7 @@ export default function UserAccessPage() {
   const user = useUser(userId);
   const projects = useProjects("");
   const update = useUpdateUser();
-  const toast = useToast();
+  const emailToast = useEmailToast();
   const navigate = useNavigate();
   const [form, setForm] = useState(null);
 
@@ -66,14 +66,14 @@ export default function UserAccessPage() {
 
   async function handleSave() {
     try {
-      await update.mutateAsync({
+      const { emails } = await update.mutateAsync({
         id: user.data.id,
         name: form.name.trim(),
         email: form.email.trim(),
         ...(isSelf ? {} : { role: form.role, active: form.active }),
         ...(isAdminRole ? {} : { projectIds: [...form.projectIds] }),
       });
-      toast.success(`Saved access for ${form.name.trim()}.`);
+      emailToast(`Saved access for ${form.name.trim()}.`, emails);
       navigate("/users");
     } catch {
       /* Shown on the page. */

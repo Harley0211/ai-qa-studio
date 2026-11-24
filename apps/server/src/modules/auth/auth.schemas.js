@@ -42,9 +42,12 @@ export const changePasswordSchema = z
   })
   .strict();
 
+// Without a password the person is invited by email to choose their own.
 export const createUserSchema = z
-  .object({ name, email, password, role: z.enum(ROLES).default("MEMBER"), projectIds: ids.optional() })
+  .object({ name, email, password: password.optional(), role: z.enum(ROLES).default("MEMBER"), projectIds: ids.optional() })
   .strict();
+
+export const acceptInvitationSchema = z.object({ password }).strict();
 
 export const updateUserSchema = z
   .object({

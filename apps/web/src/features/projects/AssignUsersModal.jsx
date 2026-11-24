@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/Button.jsx';
 import { Modal } from '../../components/ui/Modal.jsx';
 import { ErrorState, LoadingState } from '../../components/ui/States.jsx';
 import { Badge, Switch } from '../../components/ui/Switch.jsx';
-import { useToast } from '../../components/ui/Toast.jsx';
+import { useEmailToast } from '../emails/emailOutcome.js';
 import { Avatar } from '../auth/AccountMenu.jsx';
 import { useProjectMembers, useSetProjectMembers, useUsers } from '../auth/auth.hooks.js';
 
@@ -13,7 +13,7 @@ export function AssignUsersModal({ project, onClose }) {
   const users = useUsers();
   const members = useProjectMembers(project.id);
   const save = useSetProjectMembers(project.id);
-  const toast = useToast();
+  const emailToast = useEmailToast();
   const [selected, setSelected] = useState(null);
 
   useEffect(() => {
@@ -31,8 +31,8 @@ export function AssignUsersModal({ project, onClose }) {
 
   async function handleSave() {
     try {
-      await save.mutateAsync([...selected]);
-      toast.success(`Saved who can open ${project.name}.`);
+      const { emails } = await save.mutateAsync([...selected]);
+      emailToast(`Saved who can open ${project.name}.`, emails);
       onClose();
     } catch {
       /* Shown below. */

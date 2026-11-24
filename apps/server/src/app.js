@@ -19,6 +19,8 @@ import { createN8nClient } from "./modules/generation/generation.n8n.js";
 import { createOllamaClient } from "./modules/bug-reports/bugReports.ollama.js";
 import { createBugReportService } from "./modules/bug-reports/bugReports.service.js";
 import { DEFAULT_FILES_ROOT, createFileStore } from "./lib/fileStore.js";
+import { createEmailService, createN8nEmailSender } from "./modules/email/email.service.js";
+import { emailsRouter } from "./modules/email/email.routes.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -32,8 +34,23 @@ export function createApp({
   filesRoot = DEFAULT_FILES_ROOT,
   n8nClient: injectedN8nClient,
   ollamaClient: injectedOllamaClient,
+  // Tests pass a fake sender; null means "email not set up".
+  emailSender: injectedEmailSender,
 }) {
   const app = express();
+  const emails = createEmailService({
+    prisma,
+    sender:
+      injectedEmailSender !== undefined
+        ? injectedEmailSender
+        : createN8nEmailSender({
+            webhookUrl: env.N8N_EMAIL_WEBHOOK_URL,
+            requestSecret: env.N8N_REQUEST_SECRET,
+            from: env.EMAIL_FROM,
+          }),
+    log: env.NODE_ENV === "test" ? () => {} : (line) => console.warn(line),
+  });
+  const mail = { emails, publicAppUrl: env.PUBLIC_APP_URL };
   const n8nClient =
     injectedN8nClient ??
     createN8nClient({
@@ -90,8 +107,9 @@ export function createApp({
   app.use(loadSession(sessions));
 
   app.use("/api/health", healthRouter({ prisma }));
-  app.use("/api/auth", authRouter({ prisma, sessions, allowSignup: env.ALLOW_SIGNUP !== false }));
-  app.use("/api/users", requireAdmin, usersRouter({ prisma, sessions }));
+  app.use("/api/auth", authRouter({ prisma, sessions, allowSignup: env.ALLOW_SIGNUP !== false, mail }));
+  app.use("/api/users", requireAdmin, usersRouter({ prisma, sessions, mail }));
+  app.use("/api/emails", requireAdmin, emailsRouter({ emails }));
   app.use(
     "/api/projects",
     // n8n's callbacks and its signed screenshot downloads carry their own
@@ -113,6 +131,7 @@ export function createApp({
       bugReports,
       fileStore,
       maxFileBytes,
+      mail,
     }),
   );
 

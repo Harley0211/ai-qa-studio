@@ -48,6 +48,19 @@ const schema = z.object({
   // Largest single file saved in a bug report or HAR folder. The public
   // Cloudflare link refuses uploads over 100 MB, so stay just under it.
   MAX_SAVED_FILE_MB: z.coerce.number().int().min(1).max(2048).default(95),
+  // Emails (invitations, project access, account changes) are sent by the n8n
+  // "Send email" workflow, which holds the Gmail login. Both are needed to
+  // send; without them emails are logged as "not sent" (Admin → Emails).
+  N8N_EMAIL_WEBHOOK_URL: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().url().optional(),
+  ),
+  // The sender shown in the inbox, e.g. "AI QA Studio <qa.team@gmail.com>".
+  // With Gmail this must be the Gmail address n8n signs in with.
+  EMAIL_FROM: z.preprocess((value) => (value === "" ? undefined : value), z.string().min(3).optional()),
+  // The app's address used in email links. Leave empty to use the address
+  // the admin is using at that moment (e.g. the public tunnel link).
+  PUBLIC_APP_URL: z.preprocess((value) => (value === "" ? undefined : value), z.string().url().optional()),
   // "Create an account" on the sign-in screen. New accounts are testers with
   // no projects until an admin assigns some. Set to "false" to turn it off.
   ALLOW_SIGNUP: z

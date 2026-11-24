@@ -63,7 +63,11 @@ export function createSessionStore({ prisma, secureCookies = false }) {
     await prisma.session.create({
       data: { tokenHash: hashToken(token), userId, expiresAt, remember },
     });
-    await prisma.user.update({ where: { id: userId }, data: { lastLoginAt: new Date() } });
+    // Signed in: any invitation link still out there stops working.
+    await prisma.user.update({
+      where: { id: userId },
+      data: { lastLoginAt: new Date(), inviteTokenHash: null, inviteExpiresAt: null },
+    });
 
     // A cookie without an expiry date is forgotten when the browser closes.
     res.cookie(SESSION_COOKIE, token, {

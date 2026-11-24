@@ -19,10 +19,14 @@ import DocumentsTab from "../features/documents/DocumentsTab.jsx";
 import { AuthGate } from "../features/auth/AuthGate.jsx";
 import UsersPage from "../features/auth/UsersPage.jsx";
 import UserAccessPage from "../features/auth/UserAccessPage.jsx";
+import AcceptInvitePage from "../features/auth/AcceptInvitePage.jsx";
+import EmailsPage from "../features/emails/EmailsPage.jsx";
 
 export function AppRoutes() {
   return (
     <Routes>
+      {/* From an invitation email: works without signing in. */}
+      <Route path="/invite/:token" element={<AcceptInvitePage />} />
       <Route
         element={
           <AuthGate>
@@ -32,6 +36,7 @@ export function AppRoutes() {
       >
         <Route path="/users" element={<UsersPage />} />
         <Route path="/users/:userId" element={<UserAccessPage />} />
+        <Route path="/emails" element={<EmailsPage />} />
         <Route path="/" element={<Navigate to={PROJECTS_PATH} replace />} />
         {/* Choose a project: the start page after signing in. */}
         <Route path={PROJECTS_PATH} element={<ProjectsPage />} />

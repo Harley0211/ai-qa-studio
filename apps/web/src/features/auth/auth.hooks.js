@@ -138,16 +138,48 @@ function useUsersMutation(mutationFn) {
   });
 }
 
-export const useCreateUser = () =>
-  useUsersMutation(async (user) => (await api.post("/users", user)).data);
+// These resolve to the server's answer: { data, emails } (emails: what was
+// sent to the person about the change, see emailOutcome.js).
+export const useCreateUser = () => useUsersMutation((user) => api.post("/users", user));
 
 export const useUpdateUser = () =>
-  useUsersMutation(async ({ id, ...changes }) =>
-    (await api.patch(`/users/${encodeURIComponent(id)}`, changes)).data,
-  );
+  useUsersMutation(({ id, ...changes }) => api.patch(`/users/${encodeURIComponent(id)}`, changes));
 
 export const useDeleteUser = () =>
   useUsersMutation((id) => api.delete(`/users/${encodeURIComponent(id)}`));
+
+export const useResendInvitation = () =>
+  useUsersMutation((id) => api.post(`/users/${encodeURIComponent(id)}/invitation`));
+
+// Opening an emailed invitation link (no sign-in needed).
+export function useInvitation(token) {
+  return useQuery({
+    queryKey: ["auth", "invitation", token],
+    queryFn: () => api.get(`/auth/invitations/${encodeURIComponent(token)}`),
+    retry: false,
+  });
+}
+
+export function useAcceptInvitation(token) {
+  const start = useStartSession();
+  return useMutation({
+    mutationFn: (password) => api.post(`/auth/invitations/${encodeURIComponent(token)}/accept`, { password }),
+    onSuccess: (result) => start(result.user, { remember: false }),
+  });
+}
+
+// Admin → Emails.
+export function useEmails() {
+  return useQuery({ queryKey: ["emails"], queryFn: () => api.get("/emails"), refetchInterval: 15_000 });
+}
+
+export function useRetryEmail() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id) => api.post(`/emails/${encodeURIComponent(id)}/retry`),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["emails"] }),
+  });
+}
 
 // Admin: the testers assigned to one project.
 export function useProjectMembers(projectId) {

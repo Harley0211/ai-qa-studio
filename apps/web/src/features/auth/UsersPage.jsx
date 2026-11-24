@@ -7,7 +7,9 @@ import { Button } from "../../components/ui/Button.jsx";
 import { ConfirmDialog } from "../../components/ui/ConfirmDialog.jsx";
 import { Modal } from "../../components/ui/Modal.jsx";
 import { EmptyState, ErrorState, LoadingState } from "../../components/ui/States.jsx";
-import { Badge } from "../../components/ui/Switch.jsx";
+import { Badge, Switch } from "../../components/ui/Switch.jsx";
+import { useEmailToast } from "../emails/emailOutcome.js";
+import { useProjects } from "../projects/hooks.js";
 import { TextField } from "../../components/ui/TextField.jsx";
 import { useToast } from "../../components/ui/Toast.jsx";
 import NotFoundPage from "../../app/NotFoundPage.jsx";
@@ -18,6 +20,7 @@ import {
   useCreateUser,
   useCurrentUser,
   useDeleteUser,
+  useResendInvitation,
   useUpdateUser,
   useUsers,
 } from "./auth.hooks.js";
@@ -65,34 +68,40 @@ function FormAlert({ message }) {
   return <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{message}</p>;
 }
 
+// Add someone: they get an invitation email with a link to choose their own
+// password. A tester's projects can be chosen here, so the invitation lists them.
 function AddUserModal({ onClose }) {
   const create = useCreateUser();
-  const toast = useToast();
-  const navigate = useNavigate();
-  const [values, setValues] = useState({ name: "", email: "", password: "", role: "MEMBER" });
+  const projects = useProjects("");
+  const emailToast = useEmailToast();
+  const [values, setValues] = useState({ name: "", email: "", role: "MEMBER", projectIds: new Set() });
   const { fields, message } = formErrors(create.error);
   const set = (field) => (event) => setValues((v) => ({ ...v, [field]: event.target.value }));
+  const toggleProject = (id, on) =>
+    setValues((v) => {
+      const next = new Set(v.projectIds);
+      if (on) next.add(id);
+      else next.delete(id);
+      return { ...v, projectIds: next };
+    });
 
   async function handleSubmit(event) {
     event.preventDefault();
     try {
-      const user = await create.mutateAsync({
+      const { data: user, emails } = await create.mutateAsync({
         name: values.name.trim(),
         email: values.email.trim(),
-        password: values.password,
         role: values.role,
+        ...(values.role === "MEMBER" ? { projectIds: [...values.projectIds] } : {}),
       });
       onClose();
-      if (user.role === "MEMBER") {
-        toast.success(`Added ${user.name}. Choose the projects they can open.`);
-        navigate(userHref(user.id));
-      } else {
-        toast.success(`Added ${user.name}. Give them their email and password to sign in.`);
-      }
+      emailToast(`Invited ${user.name}.`, emails);
     } catch {
       /* Shown in the form. */
     }
   }
+
+  const projectItems = projects.data?.items ?? [];
 
   return (
     <Modal title="Add user" onClose={create.isPending ? () => {} : onClose}>
@@ -106,15 +115,7 @@ function AddUserModal({ onClose }) {
           value={values.email}
           onChange={set("email")}
           error={fields.email}
-        />
-        <TextField
-          label="Password"
-          type="password"
-          autoComplete="new-password"
-          value={values.password}
-          onChange={set("password")}
-          error={fields.password}
-          hint="At least 8 characters. They can change it after signing in."
+          hint="They get an invitation email with a link to choose their own password (valid 7 days)."
         />
         <div>
           <p className="mb-1 block text-sm font-medium text-slate-700">Role</p>
@@ -123,9 +124,27 @@ function AddUserModal({ onClose }) {
             Admins open every project and manage users. Testers only open the projects you assign.
           </p>
         </div>
+        {values.role === "MEMBER" && projectItems.length > 0 && (
+          <fieldset>
+            <legend className="mb-1 text-sm font-medium text-slate-700">Projects they can open</legend>
+            <ul className="max-h-48 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
+              {projectItems.map((project) => (
+                <li key={project.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                  <span className="truncate text-sm text-slate-800">{project.name}</span>
+                  <Switch
+                    checked={values.projectIds.has(project.id)}
+                    onChange={(on) => toggleProject(project.id, on)}
+                    label={`Access to ${project.name}`}
+                  />
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1 text-xs text-slate-500">You can change this later. The invitation lists these projects.</p>
+          </fieldset>
+        )}
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="secondary" onClick={onClose} disabled={create.isPending}>Cancel</Button>
-          <Button type="submit" loading={create.isPending}>Add user</Button>
+          <Button type="submit" loading={create.isPending}>Send invitation</Button>
         </div>
       </form>
     </Modal>
@@ -258,6 +277,7 @@ function RowMenu({ user, onAction }) {
             className="fixed z-50 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-xl"
           >
             {item("assign", "Assign projects")}
+            {user.status === "INVITED" && user.active !== false && item("resend", "Resend invitation")}
             {item("reset", "Reset password")}
             {item("role", user.role === "ADMIN" ? "Change role to Tester" : "Change role to Admin")}
             {item(user.active !== false ? "disable" : "enable", user.active !== false ? "Disable" : "Enable")}
@@ -276,7 +296,9 @@ export default function UsersPage() {
   const { data, isPending, isError, error, refetch } = useUsers();
   const update = useUpdateUser();
   const remove = useDeleteUser();
+  const resend = useResendInvitation();
   const toast = useToast();
+  const emailToast = useEmailToast();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
@@ -307,11 +329,20 @@ export default function UsersPage() {
 
   async function setActive(user, active) {
     try {
-      await update.mutateAsync({ id: user.id, active });
-      toast.success(active ? `${user.name} can sign in again.` : `${user.name} was disabled and signed out.`);
+      const { emails } = await update.mutateAsync({ id: user.id, active });
+      emailToast(active ? `${user.name} can sign in again.` : `${user.name} was disabled and signed out.`, emails);
       setDisabling(null);
     } catch (err) {
       if (!active) return; // shown in the dialog
+      toast.error(err.message);
+    }
+  }
+
+  async function resendInvitation(user) {
+    try {
+      const { emails } = await resend.mutateAsync(user.id);
+      emailToast(`New invitation for ${user.name}. The old link no longer works.`, emails);
+    } catch (err) {
       toast.error(err.message);
     }
   }
@@ -328,6 +359,7 @@ export default function UsersPage() {
 
   function handleAction(action, user) {
     if (action === "assign") navigate(userHref(user.id));
+    if (action === "resend") resendInvitation(user);
     if (action === "reset") setResetting(user);
     if (action === "role") changeRole(user);
     if (action === "enable") setActive(user, true);
@@ -343,8 +375,8 @@ export default function UsersPage() {
 
   async function confirmRemove() {
     try {
-      await remove.mutateAsync(removing.id);
-      toast.success(`Removed ${removing.name}.`);
+      const result = await remove.mutateAsync(removing.id);
+      emailToast(`Removed ${removing.name}.`, result?.emails);
       setRemoving(null);
     } catch {
       /* Shown in the dialog. */
@@ -371,7 +403,10 @@ export default function UsersPage() {
           <tbody className="divide-y divide-slate-100">
             {shown.map((user) => {
               const isMe = user.id === me.id;
-              const status = STATUS[user.status] ?? STATUS.ACTIVE;
+              const status =
+                user.status === "INVITED" && user.invitation === "EXPIRED"
+                  ? { label: "Invitation expired", tone: "neutral" }
+                  : STATUS[user.status] ?? STATUS.ACTIVE;
               return (
                 <tr key={user.id} className={user.active !== false ? "" : "opacity-60"}>
                   <td className="px-4 py-3">
@@ -456,7 +491,9 @@ export default function UsersPage() {
       {content}
 
       <p className="mt-3 text-xs text-slate-500">
-        Row menu: Assign projects · Reset password · Change role · Disable. An admin cannot disable or demote themselves.
+        Row menu: Assign projects · Resend invitation · Reset password · Change role · Disable. An admin cannot
+        disable or demote themselves. People get an email when they're invited, given or removed from a project,
+        disabled, enabled or removed.
       </p>
 
       {adding && <AddUserModal onClose={() => setAdding(false)} />}

@@ -1,6 +1,8 @@
+import { randomBytes } from "node:crypto";
 import { Router } from "express";
 import { asyncHandler } from "../../lib/asyncHandler.js";
 import { ApiError } from "../../lib/errors.js";
+import { createNotifier, newInvitation } from "../email/notifications.js";
 import { hashPassword } from "./auth.passwords.js";
 import { emailTaken } from "./auth.routes.js";
 import { createUserSchema, updateUserSchema } from "./auth.schemas.js";
@@ -14,15 +16,27 @@ const notYourself = (what) =>
 
 const withProjects = { projects: { select: { projectId: true } } };
 
-// A user for the admin screens: with the projects they are assigned to.
-const adminUser = ({ projects, ...user }) => ({
+// A user for the admin screens: with the projects they are assigned to and
+// the state of their invitation.
+const adminUser = ({ projects, inviteTokenHash, inviteExpiresAt, ...user }) => ({
   ...publicUser(user),
   projectIds: projects.map((p) => p.projectId),
+  invitation: user.lastLoginAt
+    ? null
+    : !inviteTokenHash
+      ? "NONE"
+      : inviteExpiresAt > new Date()
+        ? "PENDING"
+        : "EXPIRED",
+  inviteExpiresAt: user.lastLoginAt ? null : inviteExpiresAt ?? null,
 });
 
-// Admin-only user management (mounted behind requireAdmin).
-export function usersRouter({ prisma, sessions }) {
+// Admin-only user management (mounted behind requireAdmin). Changes that
+// affect a person send them an email (see email/notifications.js); the
+// response lists those emails and whether they went out.
+export function usersRouter({ prisma, sessions, mail }) {
   const router = Router();
+  const notify = createNotifier({ prisma, mail });
 
   async function findUser(id) {
     const user = await prisma.user.findUnique({ where: { id }, include: withProjects });
@@ -58,6 +72,8 @@ export function usersRouter({ prisma, sessions }) {
     }),
   );
 
+  // Without a password the person is invited by email and chooses their own
+  // password from the link. (With a password, nothing is emailed.)
   router.post(
     "/",
     asyncHandler(async (req, res) => {
@@ -65,19 +81,44 @@ export function usersRouter({ prisma, sessions }) {
 
       if (await prisma.user.findUnique({ where: { email: input.email } })) throw emailTaken();
       const projectIds = input.role === "ADMIN" ? [] : await existingProjectIds(input.projectIds);
+      const invitation = input.password ? null : newInvitation();
 
       const user = await prisma.user.create({
         data: {
           name: input.name,
           email: input.email,
           role: input.role,
-          passwordHash: await hashPassword(input.password),
+          // Invited: an unknown random password until they choose one.
+          passwordHash: await hashPassword(input.password ?? randomBytes(32).toString("hex")),
+          ...(invitation ? { inviteTokenHash: invitation.inviteTokenHash, inviteExpiresAt: invitation.inviteExpiresAt } : {}),
           projects: { create: projectIds.map((projectId) => ({ projectId })) },
         },
         include: withProjects,
       });
 
-      res.status(201).json({ data: adminUser(user) });
+      const emails = invitation ? [await notify.invitation(req, user, invitation.token, req.auth.user)] : [];
+      res.status(201).json({ data: adminUser(user), emails });
+    }),
+  );
+
+  // Send a new invitation link (the old one stops working).
+  router.post(
+    "/:userId/invitation",
+    asyncHandler(async (req, res) => {
+      const user = await findUser(req.params.userId);
+      if (user.lastLoginAt) {
+        throw new ApiError(409, "ALREADY_JOINED", `${user.name} has already signed in. Reset their password instead.`);
+      }
+      if (!user.active) throw new ApiError(409, "ACCOUNT_DISABLED", "Enable the account before inviting them again");
+
+      const invitation = newInvitation();
+      const updated = await prisma.user.update({
+        where: { id: user.id },
+        data: { inviteTokenHash: invitation.inviteTokenHash, inviteExpiresAt: invitation.inviteExpiresAt },
+        include: withProjects,
+      });
+      const emails = [await notify.invitation(req, updated, invitation.token, req.auth.user)];
+      res.json({ data: adminUser(updated), emails });
     }),
   );
 
@@ -130,7 +171,19 @@ export function usersRouter({ prisma, sessions }) {
         await sessions.destroyAllFor(user.id, { exceptSessionId });
       }
 
-      res.json({ data: adminUser(updated) });
+      // Emails about what changed for them.
+      const byName = req.auth.user.name;
+      const emails = [];
+      if (input.active !== undefined && input.active !== user.active && user.lastLoginAt) {
+        emails.push(await notify.accountState(req, updated, input.active, byName));
+      }
+      if (projectIds !== undefined) {
+        emails.push(
+          ...(await notify.projectChanges(req, updated, user.projects.map((p) => p.projectId), projectIds, byName)),
+        );
+      }
+
+      res.json({ data: adminUser(updated), emails });
     }),
   );
 
@@ -146,7 +199,7 @@ export function usersRouter({ prisma, sessions }) {
 
       // Sessions and project assignments are removed with the user (cascade).
       await prisma.user.delete({ where: { id: user.id } });
-      res.status(204).end();
+      res.json({ emails: [await notify.accountRemoved(user, req.auth.user.name)] });
     }),
   );
 

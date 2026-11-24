@@ -8,6 +8,7 @@ import {
   FolderKanban,
   Image,
   Lock,
+  Mail,
   Menu,
   Sparkles,
   Users,
@@ -212,6 +213,10 @@ export function AppLayout() {
               <NavLink to="/users" className={navLinkClass}>
                 <Users className="h-4 w-4" aria-hidden="true" />
                 Users
+              </NavLink>
+              <NavLink to="/emails" className={navLinkClass}>
+                <Mail className="h-4 w-4" aria-hidden="true" />
+                Emails
               </NavLink>
             </div>
           )}

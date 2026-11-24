@@ -17,6 +17,7 @@ import { bugReportsRouter } from "../bug-reports/bugReports.routes.js";
 import { harFilesRouter } from "../har-files/harFiles.routes.js";
 import { ApiError, notFound } from "../../lib/errors.js";
 import { projectMembersSchema } from "../auth/auth.schemas.js";
+import { createNotifier } from "../email/notifications.js";
 
 export function projectsRouter({
   prisma,
@@ -29,6 +30,7 @@ export function projectsRouter({
   bugReports,
   fileStore,
   maxFileBytes,
+  mail,
 }) {
   const router = Router();
 
@@ -82,7 +84,23 @@ export function projectsRouter({
     requireAdmin,
     asyncHandler(async (req, res) => {
       const { userIds } = projectMembersSchema.parse(req.body ?? {});
-      res.json({ userIds: await service.setMembers(req.params.projectId, userIds) });
+      const { projectId } = req.params;
+      const before = new Set(await service.memberIds(projectId));
+      const after = await service.setMembers(projectId, userIds);
+
+      // Each tester added or removed gets an email about this project.
+      const changed = [...after.filter((id) => !before.has(id)), ...[...before].filter((id) => !after.includes(id))];
+      const emails = [];
+      if (mail && changed.length) {
+        const notify = createNotifier({ prisma, mail });
+        const people = await prisma.user.findMany({ where: { id: { in: changed } } });
+        for (const person of people) {
+          const had = before.has(person.id) ? [projectId] : [];
+          const has = after.includes(person.id) ? [projectId] : [];
+          emails.push(...(await notify.projectChanges(req, person, had, has, req.auth.user.name)));
+        }
+      }
+      res.json({ userIds: after, emails });
     }),
   );
 

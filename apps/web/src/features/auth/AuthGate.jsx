@@ -32,7 +32,7 @@ function Brand() {
 }
 
 // Two panels: what the app does on the left (wide screens), the form on the right.
-function AuthLayout({ headline, text, points, children }) {
+export function AuthLayout({ headline, text, points, children }) {
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-900">
       <aside className="hidden w-[44%] flex-col justify-between border-r border-slate-200 bg-white px-12 py-12 lg:flex">
@@ -65,7 +65,7 @@ function AuthLayout({ headline, text, points, children }) {
   );
 }
 
-function FormTitle({ title, description }) {
+export function FormTitle({ title, description }) {
   return (
     <div className="mb-6">
       <h1 className="text-2xl font-bold tracking-tight text-slate-900">{title}</h1>
