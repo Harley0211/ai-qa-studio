@@ -54,6 +54,11 @@ body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
 /* See-through white panels (sidebar project box, locked project cards). */
 .dark .bg-white\/60 { background-color: rgb(30 41 59 / 0.6); }
 
+/* A project the tester can't open: a quieter, solid surface (no fading, so
+   its text stays readable over the moving background). */
+.locked-card { background: rgb(248 250 252 / 0.92); }
+.dark .locked-card { background: rgb(15 23 42 / 0.88); }
+
 /* Sidebar account card: a clear surface with an accent edge in both themes. */
 .live-account {
   background: rgb(255 255 255 / 0.7);

@@ -23,21 +23,21 @@ const footerLink = 'font-medium text-slate-500 hover:text-indigo-700';
 // A project a tester isn't assigned to: only its name, no way in.
 function LockedCard({ project }) {
   return (
-    <li className="flex flex-col rounded-xl border border-dashed border-slate-200 bg-white/60 opacity-80">
+    <li className="locked-card flex flex-col rounded-xl border border-dashed border-slate-300">
       <div className="flex-1 p-5">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="truncate text-base font-semibold text-slate-500">{project.name}</h3>
+          <h3 className="truncate text-base font-semibold text-slate-600">{project.name}</h3>
           <Badge>No access</Badge>
         </div>
-        <p className="mt-1 text-sm text-slate-400">Project details are hidden</p>
+        <p className="mt-1 text-sm text-slate-500">Project details are hidden</p>
         <div className="mt-4 flex">
-          <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 px-2 py-0.5 text-xs text-slate-400">
+          <span className="inline-flex items-center gap-1 rounded-full border border-slate-300 px-2 py-0.5 text-xs text-slate-500">
             <Lock className="h-3 w-3" aria-hidden="true" />
             Locked
           </span>
         </div>
       </div>
-      <p className="border-t border-slate-100 px-5 py-3 text-xs text-slate-500">
+      <p className="border-t border-slate-200 px-5 py-3 text-xs text-slate-600">
         Not assigned to you. Ask an admin for access.
       </p>
     </li>
