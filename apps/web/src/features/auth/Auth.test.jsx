@@ -416,6 +416,31 @@ describe("Users page (admin)", () => {
     expect(await within(dialog).findByText("A user with this email already exists")).toBeInTheDocument();
   });
 
+  it("opens the row menu floating above the page, not inside the table", async () => {
+    const user = userEvent.setup();
+    mockUsers();
+    renderRoute("/users");
+
+    const table = await screen.findByRole("table");
+    const dots = screen.getByRole("button", { name: "More actions for Maria Santos" });
+    await user.click(dots);
+
+    const menu = screen.getByRole("menu", { name: "Actions for Maria Santos" });
+    expect(table.contains(menu)).toBe(false);
+    expect(menu).toHaveClass("fixed");
+    expect(dots).toHaveAttribute("aria-expanded", "true");
+    // Focus moves into the menu; Escape closes it and returns focus.
+    expect(within(menu).getByRole("menuitem", { name: "Assign projects" })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(dots).toHaveFocus();
+
+    // A click elsewhere closes it too.
+    await user.click(dots);
+    await user.click(screen.getByRole("heading", { name: "Users" }));
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
   it("resets a password, disables, enables and removes users from the row menu", async () => {
     const user = userEvent.setup();
     const mock = mockUsers();

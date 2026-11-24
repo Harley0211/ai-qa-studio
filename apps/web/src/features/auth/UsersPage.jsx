@@ -1,5 +1,6 @@
 import { MoreHorizontal, Search, UserPlus, Users } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 import { PageHeader } from "../../components/layout/PageHeader.jsx";
 import { Button } from "../../components/ui/Button.jsx";
@@ -170,21 +171,51 @@ export function ResetPasswordModal({ user, onClose }) {
   );
 }
 
-// "…" menu on a row: every action for one user.
+const MENU_WIDTH = 192;
+const MENU_HEIGHT = 200;
+
+// Where the floating menu goes: under the button, right-aligned with it, or
+// above it when there is no room below.
+function menuPosition(button) {
+  const rect = button.getBoundingClientRect();
+  const left = Math.max(8, Math.min(rect.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - 8));
+  const below = rect.bottom + 4;
+  const top = below + MENU_HEIGHT > window.innerHeight ? Math.max(8, rect.top - MENU_HEIGHT - 4) : below;
+  return { top, left };
+}
+
+// "…" menu on a row: every action for one user. It floats above the page
+// (rendered in <body>), so the table's scroll box never cuts it off.
 function RowMenu({ user, onAction }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+  const [position, setPosition] = useState(null);
+  const open = position !== null;
+  const buttonRef = useRef(null);
+  const menuRef = useRef(null);
+  const close = () => setPosition(null);
 
   useEffect(() => {
     if (!open) return undefined;
-    const close = (event) => {
-      if (event.type === "keydown" ? event.key === "Escape" : !ref.current?.contains(event.target)) setOpen(false);
+    const onPointer = (event) => {
+      if (!menuRef.current?.contains(event.target) && !buttonRef.current?.contains(event.target)) close();
     };
-    document.addEventListener("mousedown", close);
-    document.addEventListener("keydown", close);
+    const onKey = (event) => {
+      if (event.key === "Escape") {
+        close();
+        buttonRef.current?.focus();
+      }
+    };
+    // The menu stays put while the page moves, so close it instead.
+    const onMove = () => close();
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onMove, true);
+    window.addEventListener("resize", onMove);
+    menuRef.current?.querySelector('[role="menuitem"]')?.focus();
     return () => {
-      document.removeEventListener("mousedown", close);
-      document.removeEventListener("keydown", close);
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onMove, true);
+      window.removeEventListener("resize", onMove);
     };
   }, [open]);
 
@@ -193,37 +224,48 @@ function RowMenu({ user, onAction }) {
       type="button"
       role="menuitem"
       onClick={() => {
-        setOpen(false);
+        close();
         onAction(action, user);
       }}
-      className={`block w-full px-3 py-2 text-left text-sm hover:bg-slate-100 ${danger ? "text-red-600" : "text-slate-700"}`}
+      className={`block w-full px-3 py-2 text-left text-sm hover:bg-slate-100 focus:bg-slate-100 focus:outline-none ${
+        danger ? "text-red-600" : "text-slate-700"
+      }`}
     >
       {label}
     </button>
   );
 
   return (
-    <div ref={ref} className="relative">
+    <>
       <button
+        ref={buttonRef}
         type="button"
         aria-label={`More actions for ${user.name}`}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-        className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
+        onClick={() => (open ? close() : setPosition(menuPosition(buttonRef.current)))}
+        className={`rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 ${open ? "bg-slate-100" : ""}`}
       >
         <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
       </button>
-      {open && (
-        <div role="menu" className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
-          {item("assign", "Assign projects")}
-          {item("reset", "Reset password")}
-          {item("role", user.role === "ADMIN" ? "Change role to Tester" : "Change role to Admin")}
-          {item(user.active !== false ? "disable" : "enable", user.active !== false ? "Disable" : "Enable")}
-          {item("remove", "Remove user", true)}
-        </div>
-      )}
-    </div>
+      {open &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            aria-label={`Actions for ${user.name}`}
+            style={{ top: position.top, left: position.left, width: MENU_WIDTH }}
+            className="fixed z-50 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-xl"
+          >
+            {item("assign", "Assign projects")}
+            {item("reset", "Reset password")}
+            {item("role", user.role === "ADMIN" ? "Change role to Tester" : "Change role to Admin")}
+            {item(user.active !== false ? "disable" : "enable", user.active !== false ? "Disable" : "Enable")}
+            {item("remove", "Remove user", true)}
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
 

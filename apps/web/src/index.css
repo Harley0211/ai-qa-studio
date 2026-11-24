@@ -51,6 +51,23 @@ body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
 
 /* Card and input surfaces (sit slightly above the slate-50 page background). */
 .dark .bg-white { background-color: #0f172a; }
+/* See-through white panels (sidebar project box, locked project cards). */
+.dark .bg-white\/60 { background-color: rgb(30 41 59 / 0.6); }
+
+/* Sidebar account card: a clear surface with an accent edge in both themes. */
+.live-account {
+  background: rgb(255 255 255 / 0.7);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s-accent-a) 22%, transparent);
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+.live-account:hover,
+.live-account:focus-visible {
+  background: rgb(255 255 255 / 0.95);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--s-accent-a) 45%, transparent);
+}
+.dark .live-account { background: rgb(30 41 59 / 0.75); }
+.dark .live-account:hover,
+.dark .live-account:focus-visible { background: rgb(51 65 85 / 0.85); }
 
 /* Backdrops use slate-900, which is light after the inversion above. */
 .dark .bg-slate-900\/40 { background-color: rgb(0 0 0 / 0.55); }
@@ -75,6 +92,7 @@ body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
 .dark .text-amber-600,
 .dark .text-amber-700,
 .dark .text-amber-800 { color: #fcd34d; }
+.dark .text-amber-900 { color: #fde68a; }
 
 /*
  * Seasonal "live" look (see src/lib/season.js, LiveBackground.jsx).
