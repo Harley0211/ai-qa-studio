@@ -211,7 +211,7 @@ export function startBugReportTask({ project, form, environment, attachments, on
   return task.id;
 }
 
-// For tests.
+// On sign-out (the list belongs to the person signing out), and in tests.
 export function resetTasks() {
   tasks = [];
   emit();

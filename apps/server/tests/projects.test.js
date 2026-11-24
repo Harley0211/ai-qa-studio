@@ -155,9 +155,9 @@ describe('DELETE /api/projects/:id', () => {
 });
 
 describe('Who can manage projects', () => {
-  it('lets members open projects but only admins create, rename or delete them', async () => {
+  it('lets testers open their projects but only admins create, rename or delete them', async () => {
     const p = await createProject({ name: 'PNCC' });
-    const member = await createSignedInUser({ email: 'member@test.local', name: 'Member' });
+    const member = await createSignedInUser({ email: 'member@test.local', name: 'Member', projectIds: [p.id] });
     const asMember = (method, url) => request(app)[method](url).set('Cookie', member.cookie);
 
     expect((await asMember('get', '/api/projects')).body.total).toBe(1);

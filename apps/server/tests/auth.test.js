@@ -40,7 +40,7 @@ describe("First run", () => {
   it("asks for the first admin when there are no users", async () => {
     const res = await anonymousApi().get("/api/auth/status");
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ setupRequired: true, user: null });
+    expect(res.body).toEqual({ setupRequired: true, signupAllowed: false, user: null });
   });
 
   it("creates the first admin, signs them in, and closes setup", async () => {
@@ -271,10 +271,10 @@ describe("Managing users (admin)", () => {
 
     expect((await anonymousApi().get("/api/users")).status).toBe(401);
 
-    // Members still work on every project (shared team).
+    // Testers see project names, but only open the ones assigned to them.
     await createProject({ name: "Shared" });
     const projects = await anonymousApi().get("/api/projects").set("Cookie", cookie);
-    expect(projects.body.items.map((p) => p.name)).toEqual(["Shared"]);
+    expect(projects.body.items).toEqual([{ id: expect.any(String), name: "Shared", access: "NONE" }]);
   });
 
   it("resets a password, which signs that user out", async () => {
@@ -298,11 +298,11 @@ describe("Managing users (admin)", () => {
     const demoted = await usersApi().patch(`/api/users/${user.id}`).send({ role: "MEMBER" });
     expect(demoted.body.data.role).toBe("MEMBER");
 
-    // ...but the only remaining admin can't.
+    // ...but an admin can't demote themselves.
     const admin = await prisma.user.findUnique({ where: { email: TEST_ADMIN.email } });
-    const last = await usersApi().patch(`/api/users/${admin.id}`).send({ role: "MEMBER" });
-    expect(last.status).toBe(409);
-    expect(last.body.error.code).toBe("LAST_ADMIN");
+    const self = await usersApi().patch(`/api/users/${admin.id}`).send({ role: "MEMBER" });
+    expect(self.status).toBe(400);
+    expect(self.body.error.code).toBe("CANNOT_CHANGE_SELF");
   });
 
   it("removes a user and their sessions, but not yourself", async () => {

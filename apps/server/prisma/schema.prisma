@@ -8,19 +8,35 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// A person who can sign in. Everyone signed in works on all projects (shared
-// team); admins can also add, change and remove users.
+// A person who can sign in. Admins open every project and manage users;
+// testers ("MEMBER") only open the projects an admin assigned to them.
 model User {
   id           String    @id @default(cuid())
   email        String    @unique // stored lowercased
   name         String
   passwordHash String    // scrypt, see src/modules/auth/auth.passwords.js
-  role         String    @default("MEMBER") // "ADMIN" or "MEMBER"
+  role         String    @default("MEMBER") // "ADMIN" or "MEMBER" (shown as "Tester")
+  active       Boolean   @default(true) // a disabled account can't sign in
+  lastLoginAt  DateTime? // null: added by an admin and never signed in ("Invited")
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   sessions     Session[]
   bugReports   BugReport[]
   harFiles     HarFile[]
+  projects     ProjectMember[]
+}
+
+// A tester assigned to a project. Admins don't need rows here.
+model ProjectMember {
+  userId    String
+  projectId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([userId, projectId])
+  @@index([projectId])
 }
 
 // A generated bug report and its folder of files (storage/bug-reports/<id>/).
@@ -93,6 +109,9 @@ model Session {
   userId    String
   createdAt DateTime @default(now())
   expiresAt DateTime
+  // false: "Remember me" was off (ends with the browser, short expiry, and
+  // the app signs out after 30 minutes without activity).
+  remember  Boolean  @default(true)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -112,6 +131,7 @@ model Project {
   documents   Document[]
   bugReports  BugReport[]
   harFiles    HarFile[]
+  members     ProjectMember[]
   nextTestCaseNumber Int @default(1)
 
   @@index([updatedAt])

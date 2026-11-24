@@ -70,7 +70,7 @@ const SectionLabel = ({ children }) => (
 
 // The project you're working in, with a way back to the project picker.
 function CurrentProject({ projectId }) {
-  const { data: project } = useProject(projectId);
+  const { data: project, isError } = useProject(projectId);
   return (
     <div className="mb-2 rounded-lg border border-slate-200 bg-white/60 px-3 py-2">
       <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Project</p>
@@ -80,7 +80,7 @@ function CurrentProject({ projectId }) {
         className="block truncate text-sm font-semibold text-slate-900 hover:text-indigo-700"
         title={project?.name}
       >
-        {project?.name ?? 'Loading…'}
+        {project?.name ?? (isError ? 'Unavailable' : 'Loading…')}
       </NavLink>
       <NavLink to={PROJECTS_PATH} end className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:underline">
         <ArrowLeftRight className="h-3 w-3" aria-hidden="true" />

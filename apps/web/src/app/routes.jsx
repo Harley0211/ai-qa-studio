@@ -18,6 +18,7 @@ import HarFilePage from "../features/har/HarFilePage.jsx";
 import DocumentsTab from "../features/documents/DocumentsTab.jsx";
 import { AuthGate } from "../features/auth/AuthGate.jsx";
 import UsersPage from "../features/auth/UsersPage.jsx";
+import UserAccessPage from "../features/auth/UserAccessPage.jsx";
 
 export function AppRoutes() {
   return (
@@ -30,6 +31,7 @@ export function AppRoutes() {
         }
       >
         <Route path="/users" element={<UsersPage />} />
+        <Route path="/users/:userId" element={<UserAccessPage />} />
         <Route path="/" element={<Navigate to={PROJECTS_PATH} replace />} />
         {/* Choose a project: the start page after signing in. */}
         <Route path={PROJECTS_PATH} element={<ProjectsPage />} />

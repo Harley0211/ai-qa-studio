@@ -15,25 +15,29 @@ describe('Projects dashboard', () => {
     expect(screen.getAllByText('2 URLs').length).toBeGreaterThan(0);
   });
 
-  it('shows test case totals, per-project counts and the image tool shortcut', async () => {
+  it('shows totals, per-project counts and how many testers are assigned', async () => {
     mockApi({
       'GET /api/projects': {
         items: [
-          project({ id: 'p1', name: 'Alpha', urlCount: 1, testCaseCount: 11, evidenceCount: 1 }),
-          project({ id: 'p2', name: 'Beta', urlCount: 0, testCaseCount: 4, evidenceCount: 0 }),
+          project({ id: 'p1', name: 'Alpha', urlCount: 1, testCaseCount: 11, memberCount: 3, access: 'ADMIN' }),
+          project({ id: 'p2', name: 'Beta', urlCount: 0, testCaseCount: 4, memberCount: 0, access: 'ADMIN' }),
         ],
         total: 2,
       },
+      'GET /api/users': { items: [], total: 4, projectTotal: 2 },
     });
     renderRoute('/projects');
 
     const alpha = (await screen.findByRole('heading', { name: 'Alpha' })).closest('li');
     expect(screen.getByText('Test cases').nextElementSibling).toHaveTextContent('15');
+    await waitFor(() => expect(screen.getByText('Users', { selector: 'dt' }).nextElementSibling).toHaveTextContent('4'));
 
     expect(within(alpha).getByText('1 URL')).toBeInTheDocument();
     expect(within(alpha).getByText('11 test cases')).toBeInTheDocument();
-    expect(within(alpha).getByText('1 image')).toBeInTheDocument();
+    expect(within(alpha).getByText('3 users')).toBeInTheDocument();
     expect(within(alpha).getByRole('link', { name: /Open project/ })).toHaveAttribute('href', '/projects/p1');
+    const beta = screen.getByRole('heading', { name: 'Beta' }).closest('li');
+    expect(within(beta).getByText('No users')).toBeInTheDocument();
   });
 
   it('shows an empty state with a call to action when there are no projects', async () => {
@@ -129,17 +133,93 @@ function json201(body) {
 describe('Choosing a project', () => {
   const member = { setupRequired: false, user: signedInUser({ id: 'u2', role: 'MEMBER', name: 'Mia Member' }) };
   const list = { items: [project({ id: 'p1', name: 'PNCC' }), project({ id: 'p2', name: 'Fiber' })], total: 2 };
+  const testerList = {
+    items: [
+      project({ id: 'p1', name: 'PNCC', access: 'ASSIGNED', testCaseCount: 11, urlCount: 1 }),
+      { id: 'p2', name: 'Fiber', access: 'NONE' },
+    ],
+    total: 2,
+  };
 
-  it('is the start page, and members can open projects but not add, edit or delete them', async () => {
-    mockApi({ 'GET /api/auth/status': member, 'GET /api/projects': list });
+  it('is the start page: testers open assigned projects and see the others locked', async () => {
+    mockApi({ 'GET /api/auth/status': member, 'GET /api/projects': testerList });
     renderRoute('/');
 
-    expect(await screen.findByRole('heading', { name: 'Choose a project' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Projects' })).toBeInTheDocument();
+    expect(screen.getByText('You can open the projects an admin has assigned to you.')).toBeInTheDocument();
     const pncc = (await screen.findByRole('heading', { name: 'PNCC' })).closest('li');
+    expect(within(pncc).getByText('Assigned')).toBeInTheDocument();
     expect(within(pncc).getByRole('link', { name: /Open project/ })).toHaveAttribute('href', '/projects/p1');
+
+    const fiber = screen.getByRole('heading', { name: 'Fiber' }).closest('li');
+    expect(within(fiber).getByText('No access')).toBeInTheDocument();
+    expect(within(fiber).getByText('Project details are hidden')).toBeInTheDocument();
+    expect(within(fiber).getByText('Not assigned to you. Ask an admin for access.')).toBeInTheDocument();
+    expect(within(fiber).queryByRole('link')).not.toBeInTheDocument();
+
+    expect(screen.getByText('Assigned to you').nextElementSibling).toHaveTextContent('1');
+    expect(screen.getByText('No access', { selector: 'dt' }).nextElementSibling).toHaveTextContent('1');
+
     expect(screen.queryByRole('button', { name: 'New project' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Edit PNCC' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Delete PNCC' })).not.toBeInTheDocument();
+  });
+
+  it('filters a tester\'s projects by access', async () => {
+    mockApi({ 'GET /api/auth/status': member, 'GET /api/projects': testerList });
+    renderRoute('/projects');
+    await screen.findByRole('heading', { name: 'PNCC' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'No access (1)' }));
+    expect(screen.queryByRole('heading', { name: 'PNCC' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Fiber' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Assigned (1)' }));
+    expect(screen.getByRole('heading', { name: 'PNCC' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Fiber' })).not.toBeInTheDocument();
+  });
+
+  it('tells a tester when a project link is not assigned to them', async () => {
+    mockApi({
+      'GET /api/auth/status': member,
+      'GET /api/projects/p2': apiError(403, 'NO_PROJECT_ACCESS', 'No access'),
+    });
+    renderRoute('/projects/p2/tools/bug-report');
+
+    expect(await screen.findByText("You don't have access to this project")).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to your projects' })).toHaveAttribute('href', '/projects');
+  });
+
+  it('lets admins choose which testers can open a project', async () => {
+    const mock = mockApi({
+      'GET /api/projects': { items: [project({ id: 'p1', name: 'PNCC', access: 'ADMIN', memberCount: 1 })], total: 1 },
+      'GET /api/users': {
+        items: [
+          signedInUser(),
+          signedInUser({ id: 'u2', name: 'Maria Santos', email: 'maria@example.com', role: 'MEMBER', active: true }),
+          signedInUser({ id: 'u3', name: 'Jun Reyes', email: 'jun@example.com', role: 'MEMBER', active: true }),
+        ],
+        total: 3,
+        projectTotal: 1,
+      },
+      'GET /api/projects/p1/members': { userIds: ['u2'] },
+      'PUT /api/projects/p1/members': (call) => ({ userIds: call.body.userIds }),
+    });
+    renderRoute('/projects');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Assign users to PNCC' }));
+    const dialog = screen.getByRole('dialog', { name: 'Assign users to PNCC' });
+    const maria = await within(dialog).findByRole('switch', { name: 'Maria Santos can open PNCC' });
+    expect(maria).toHaveAttribute('aria-checked', 'true');
+    // Admins aren't listed: they open every project.
+    expect(within(dialog).queryByText('Ada Admin')).not.toBeInTheDocument();
+
+    await userEvent.click(maria);
+    await userEvent.click(within(dialog).getByRole('switch', { name: 'Jun Reyes can open PNCC' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save access' }));
+
+    expect(await screen.findByText('Saved who can open PNCC.')).toBeInTheDocument();
+    expect(mock.find('PUT', '/api/projects/p1/members')[0].body).toEqual({ userIds: ['u3'] });
   });
 
   it('tells members to ask an admin when there are no projects', async () => {

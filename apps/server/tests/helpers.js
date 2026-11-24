@@ -46,9 +46,19 @@ export { prisma };
 export const TEST_ADMIN = { email: "admin@test.local", name: "Test Admin" };
 
 // Creates a user with a session directly in the database (fast: no password
-// hashing) and returns the Cookie header value for it.
-export async function createSignedInUser({ email, name, role = "MEMBER", passwordHash = "unused" }) {
-  const user = await prisma.user.create({ data: { email, name, role, passwordHash } });
+// hashing) and returns the Cookie header value for it. A tester only opens the
+// projects in `projectIds`.
+export async function createSignedInUser({ email, name, role = "MEMBER", passwordHash = "unused", projectIds = [] }) {
+  const user = await prisma.user.create({
+    data: {
+      email,
+      name,
+      role,
+      passwordHash,
+      lastLoginAt: new Date(),
+      projects: { create: projectIds.map((projectId) => ({ projectId })) },
+    },
+  });
   const token = randomBytes(32).toString("hex");
   await prisma.session.create({
     data: {
@@ -69,6 +79,7 @@ export async function resetDb() {
   await prisma.document.deleteMany();
   await prisma.evidence.deleteMany();
   await prisma.projectURL.deleteMany();
+  await prisma.projectMember.deleteMany();
   await prisma.project.deleteMany();
   await prisma.session.deleteMany();
   await prisma.user.deleteMany();

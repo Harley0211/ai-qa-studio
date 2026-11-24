@@ -16,8 +16,24 @@ export const loginSchema = z
   .object({
     email,
     password: z.string().min(1, "Password is required").max(200),
+    remember: z.boolean().default(true),
   })
   .strict();
+
+// Anyone can create a tester account; it opens no project until an admin
+// assigns one.
+export const registerSchema = z
+  .object({
+    name,
+    email,
+    password,
+    storedLocally: z.literal(true, {
+      errorMap: () => ({ message: "Please confirm you understand your data is stored locally" }),
+    }),
+  })
+  .strict();
+
+const ids = z.array(z.string().min(1).max(64)).max(1000);
 
 export const changePasswordSchema = z
   .object({
@@ -27,14 +43,21 @@ export const changePasswordSchema = z
   .strict();
 
 export const createUserSchema = z
-  .object({ name, email, password, role: z.enum(ROLES).default("MEMBER") })
+  .object({ name, email, password, role: z.enum(ROLES).default("MEMBER"), projectIds: ids.optional() })
   .strict();
 
 export const updateUserSchema = z
   .object({
     name: name.optional(),
+    email: email.optional(),
     role: z.enum(ROLES).optional(),
     password: password.optional(),
+    active: z.boolean().optional(),
+    // The full list of projects this tester can open (replaces the old list).
+    projectIds: ids.optional(),
   })
   .strict()
   .refine((value) => Object.keys(value).length > 0, { message: "Nothing to update" });
+
+// The full list of testers assigned to one project.
+export const projectMembersSchema = z.object({ userIds: ids }).strict();

@@ -48,6 +48,12 @@ const schema = z.object({
   // Largest single file saved in a bug report or HAR folder. The public
   // Cloudflare link refuses uploads over 100 MB, so stay just under it.
   MAX_SAVED_FILE_MB: z.coerce.number().int().min(1).max(2048).default(95),
+  // "Create an account" on the sign-in screen. New accounts are testers with
+  // no projects until an admin assigns some. Set to "false" to turn it off.
+  ALLOW_SIGNUP: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
 });
 
 const parsed = schema.safeParse(process.env);

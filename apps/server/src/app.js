@@ -74,7 +74,7 @@ export function createApp({
   app.use(
     cors({
       origin: env.corsOrigins,
-      methods: ["GET", "POST", "PATCH", "DELETE"],
+      methods: ["GET", "POST", "PATCH", "PUT", "DELETE"],
     }),
   );
 
@@ -90,7 +90,7 @@ export function createApp({
   app.use(loadSession(sessions));
 
   app.use("/api/health", healthRouter({ prisma }));
-  app.use("/api/auth", authRouter({ prisma, sessions }));
+  app.use("/api/auth", authRouter({ prisma, sessions, allowSignup: env.ALLOW_SIGNUP !== false }));
   app.use("/api/users", requireAdmin, usersRouter({ prisma, sessions }));
   app.use(
     "/api/projects",

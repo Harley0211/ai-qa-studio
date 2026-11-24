@@ -295,9 +295,11 @@ describe("A bug report's folder", () => {
     expect(await prisma.bugReportFile.count()).toBe(0);
   });
 
-  it("is shared with the team, but only its creator or an admin can change it", async () => {
+  it("is shared with the project's testers, but only its creator or an admin can change it", async () => {
     const id = await finishedReport();
-    const member = await createSignedInUser({ email: "member@test.local", name: "Member" });
+    const member = await createSignedInUser({ email: "member@test.local", name: "Member", projectIds: [project.id] });
+    const outsider = await createSignedInUser({ email: "outsider@test.local", name: "Outsider" });
+    expect((await request(app).get(`${base}/${id}`).set("Cookie", outsider.cookie)).status).toBe(403);
     const asMember = (method, url) => request(app)[method](url).set("Cookie", member.cookie);
 
     expect((await asMember("get", `${base}/${id}`)).status).toBe(200);

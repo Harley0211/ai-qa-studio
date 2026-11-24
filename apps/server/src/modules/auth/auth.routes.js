@@ -3,14 +3,35 @@ import { asyncHandler } from "../../lib/asyncHandler.js";
 import { ApiError } from "../../lib/errors.js";
 import { unauthenticated } from "./auth.middleware.js";
 import { burnPasswordCheck, hashPassword, verifyPassword } from "./auth.passwords.js";
-import { changePasswordSchema, loginSchema, setupSchema } from "./auth.schemas.js";
+import { changePasswordSchema, loginSchema, registerSchema, setupSchema } from "./auth.schemas.js";
 import { publicUser } from "./auth.sessions.js";
 
 const MAX_FAILED_LOGINS = 10;
 const FAILED_LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const MAX_SIGNUPS_PER_HOUR = 5;
 
 const invalidCredentials = () =>
   new ApiError(401, "INVALID_CREDENTIALS", "Email or password is incorrect");
+
+export const emailTaken = () =>
+  new ApiError(409, "EMAIL_TAKEN", "A user with this email already exists", {
+    fields: { email: "A user with this email already exists" },
+  });
+
+// At most a few new accounts per visitor (IP) per hour, kept in memory.
+function createSignupLimit() {
+  const recent = new Map();
+  return {
+    check(key) {
+      const now = Date.now();
+      const times = (recent.get(key) ?? []).filter((t) => now - t < 60 * 60 * 1000);
+      if (times.length >= MAX_SIGNUPS_PER_HOUR) {
+        throw new ApiError(429, "TOO_MANY_SIGNUPS", "Too many new accounts from here. Try again later.");
+      }
+      recent.set(key, [...times, now]);
+    },
+  };
+}
 
 // Slows down password guessing: after too many failures for one key (visitor and email),
 // sign-in for that key is refused for a while (kept in memory).
@@ -47,19 +68,52 @@ function createLoginThrottle() {
   };
 }
 
-export function authRouter({ prisma, sessions }) {
+export function authRouter({ prisma, sessions, allowSignup = true }) {
   const router = Router();
   const throttle = createLoginThrottle();
+  const signups = createSignupLimit();
 
-  // Who is signed in, and whether the first admin still has to be created.
+  // Who is signed in, whether the first admin still has to be created, and
+  // whether visitors can create their own (tester) account.
   router.get(
     "/status",
     asyncHandler(async (req, res) => {
       const setupRequired = (await prisma.user.count()) === 0;
       res.json({
         setupRequired,
+        signupAllowed: allowSignup && !setupRequired,
         user: req.auth?.user ? publicUser(req.auth.user) : null,
+        ...(req.auth?.user ? { remember: req.auth.remember } : {}),
       });
+    }),
+  );
+
+  // Create your own account: always a tester with no projects. An admin
+  // assigns projects afterwards.
+  router.post(
+    "/register",
+    asyncHandler(async (req, res) => {
+      if (!allowSignup) {
+        throw new ApiError(403, "SIGNUP_CLOSED", "New accounts are created by an admin");
+      }
+      if ((await prisma.user.count()) === 0) {
+        throw new ApiError(409, "SETUP_REQUIRED", "Create the first admin account first");
+      }
+      const input = registerSchema.parse(req.body ?? {});
+      if (await prisma.user.findUnique({ where: { email: input.email } })) throw emailTaken();
+      signups.check(req.ip);
+
+      const user = await prisma.user.create({
+        data: {
+          name: input.name,
+          email: input.email,
+          role: "MEMBER",
+          passwordHash: await hashPassword(input.password),
+        },
+      });
+
+      await sessions.create(req, res, user.id, { remember: false });
+      res.status(201).json({ user: publicUser({ ...user, lastLoginAt: new Date() }) });
     }),
   );
 
@@ -80,14 +134,14 @@ export function authRouter({ prisma, sessions }) {
       });
 
       await sessions.create(req, res, user.id);
-      res.status(201).json({ user: publicUser(user) });
+      res.status(201).json({ user: publicUser({ ...user, lastLoginAt: new Date() }) });
     }),
   );
 
   router.post(
     "/login",
     asyncHandler(async (req, res) => {
-      const { email, password } = loginSchema.parse(req.body ?? {});
+      const { email, password, remember } = loginSchema.parse(req.body ?? {});
       // Counted per visitor (IP) and email, so someone guessing from elsewhere
       // can't lock the real user out of their own account.
       const attemptKey = `${req.ip}|${email}`;
@@ -104,8 +158,12 @@ export function authRouter({ prisma, sessions }) {
       }
 
       throttle.succeed(attemptKey);
-      await sessions.create(req, res, user.id);
-      res.json({ user: publicUser(user) });
+      // Only said after the right password, so it doesn't reveal accounts.
+      if (!user.active) {
+        throw new ApiError(403, "ACCOUNT_DISABLED", "This account is disabled. Ask an admin to enable it.");
+      }
+      await sessions.create(req, res, user.id, { remember });
+      res.json({ user: publicUser({ ...user, lastLoginAt: new Date() }) });
     }),
   );
 

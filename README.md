@@ -3,9 +3,10 @@
 AI QA Studio is a QA tool for a small team. It turns screenshots and
 requirements documents (PRDs) into test cases with a local AI model, lets you
 review and refine them before they are saved, and then manage, run and export
-them per project. Team members sign in; everyone works on all projects.
+them per project. Team members sign in; admins open every project, testers
+open the projects an admin assigned to them.
 
-**Status (23 Nov 2026):** 411 automated tests pass (234 server, 177 web) and the
+**Status (24 Nov 2026):** 436 automated tests pass (248 server, 188 web) and the
 production build succeeds.
 
 ---
@@ -21,13 +22,21 @@ production build succeeds.
 - On the picker the sidebar's tools are locked (greyed out, "Choose a project
   to use the tools"). Inside a project the sidebar shows the project's name, a
   **Switch project** link, and the tools for that project.
-- Every signed-in user can open any project. **Only admins create, rename or
-  delete projects** (members don't see those buttons, and the server refuses
-  them). Deleting a project also deletes its bug report and HAR folders.
+- **Admins open every project. Testers open only the projects assigned to
+  them.** A tester's picker (*Projects*) shows how many are assigned and how
+  many they can't open, with filters *All / Assigned / No access*. Other
+  projects show as locked cards: name only, "Not assigned to you. Ask an admin
+  for access." The server checks the assignment on **every** request inside a
+  project (the project, all its tools and files), so removing access applies
+  on the tester's next request, not only by hiding the card.
+- **Only admins create, rename or delete projects, and assign testers** (from
+  the project card's *Assign users*, or per person on the Users page).
+  Deleting a project also deletes its bug report and HAR folders.
 - Each project keeps its own application URLs, evidence images, documents,
   test cases, bug reports and HAR files.
-- The picker shows totals (projects, test cases, URLs) and, per project, its
-  URL, test case and image counts.
+- The admin's picker shows totals (projects, test cases, users) and, per
+  project, its URL and test case counts and how many testers are assigned
+  ("No users" when none).
 - A project's **Overview** has three *Start generating* cards (from images, from
   a PRD, or write manually) and an execution summary.
 
@@ -211,16 +220,36 @@ refuses uploads over 100 MB.
 
 ### Sign-in and users
 - **First run:** the first person to open the app creates the **admin**
-  account. After that, sign-up is closed.
-- **Users page (admins):** add people (name, email, starting password, role),
-  rename them, change their role, reset a password (signs them out
-  everywhere) or remove them. The app always keeps at least one admin, and you
-  can't remove yourself.
-- **Everyone:** can open and work in any project (one project at a time),
-  change their own password (signs out their other browsers) and sign out
-  from the sidebar.
-- **Admins** also create, rename and delete projects.
-- Forgotten password: an admin resets it on the Users page.
+  account.
+- **Create an account:** after that, anyone who can open the app can create
+  their own account from the sign-in screen (name, email, password, and a
+  tick for "I understand my data is stored locally"). It is always a
+  **Tester with no projects** until an admin assigns some. Set
+  `ALLOW_SIGNUP=false` in `apps/server/.env` to turn this off (then only
+  admins add people).
+- **Sign in** with **Remember me** (on: stays signed in for 14 days; off: ends
+  when the browser closes, after 12 hours at most, and after **30 minutes
+  without activity**, which shows *You are signed out* with a short notice).
+  **Forgot password?** explains that an admin resets it.
+- **Sign out** asks for confirmation, then shows *You are signed out* with
+  **Sign in again**.
+- **Account settings** (the name card at the bottom of the sidebar): your
+  name, email and role, and changing your password (signs out your other
+  browsers).
+- **Users page (admins):** search, filters *All / Admins / Testers /
+  Disabled*, and per person their role, projects ("All projects" or "2 of 4")
+  and status: **Active**, **Invited** (added by an admin, never signed in) or
+  **Disabled**. Each row has *Assign projects* (or *Enable*) and a menu:
+  Assign projects, Reset password, Change role, Disable/Enable, Remove.
+- **Assign projects to a person** (`/users/<id>`): edit their name, email,
+  role (Admin/Tester) and *Account active*, switch projects on or off (*Select
+  all · Clear*), then **Save access**. A disabled account is signed out at
+  once and can't sign in until enabled again; its work stays.
+- An admin can't disable, demote or remove themselves, and the app always
+  keeps at least one active admin.
+- **Upgrading:** the database update gives every existing tester access to
+  every existing project, so nobody loses access; admins then remove what
+  each tester shouldn't see.
 
 ### Other
 - **Dark mode:** toggle in the sidebar (or the top bar on small screens). The
@@ -591,11 +620,18 @@ Sign-in (`/api/auth`) and users (`/api/users`, admins only):
 
 | Method and path | Purpose |
 |---|---|
-| `GET /api/auth/status` | `{ setupRequired, user }` (no sign-in needed) |
+| `GET /api/auth/status` | `{ setupRequired, signupAllowed, user, remember }` (no sign-in needed) |
 | `POST /api/auth/setup` | First run only: create the first admin and sign in |
-| `POST /api/auth/login`, `POST /api/auth/logout` | Sign in / out (session cookie) |
+| `POST /api/auth/register` | Create your own tester account (`storedLocally: true` required) |
+| `POST /api/auth/login`, `POST /api/auth/logout` | Sign in (`remember`) / out (session cookie) |
 | `POST /api/auth/password` | Change your own password |
-| `GET`/`POST /api/users`, `PATCH`/`DELETE /api/users/:id` | Manage users (admin) |
+| `GET`/`POST /api/users`, `GET`/`PATCH`/`DELETE /api/users/:id` | Manage users (admin); each has `status` and `projectIds`. `PATCH` takes `name`, `email`, `role`, `active`, `password`, `projectIds` |
+| `GET`/`PUT /api/projects/:id/members` | Testers assigned to a project (admin, `{ userIds }`) |
+
+`GET /api/projects` gives admins every project (`access: "ADMIN"`, with
+`memberCount`) and testers their assigned projects (`"ASSIGNED"`) plus the
+others as `{ id, name, access: "NONE" }`. Any request inside a project a
+tester isn't assigned to answers 403 `NO_PROJECT_ACCESS`.
 
 Everything below needs a signed-in user, except n8n's callbacks and signed
 screenshot downloads, which use their own one-time tokens. All routes are under

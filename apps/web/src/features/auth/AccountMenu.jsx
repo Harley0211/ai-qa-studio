@@ -1,13 +1,35 @@
-import { KeyRound, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { useState } from "react";
 import { Button } from "../../components/ui/Button.jsx";
 import { Modal } from "../../components/ui/Modal.jsx";
 import { TextField } from "../../components/ui/TextField.jsx";
 import { useToast } from "../../components/ui/Toast.jsx";
-import { useChangePassword, useCurrentUser, useLogout } from "./auth.hooks.js";
+import { ROLE_LABELS, useChangePassword, useCurrentUser, useLogout } from "./auth.hooks.js";
 import { formErrors } from "./AuthGate.jsx";
 
-function ChangePasswordModal({ onClose }) {
+export const initials = (name = "") =>
+  name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || "?";
+
+export function Avatar({ name, muted = false, className = "" }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+        muted ? "bg-slate-100 text-slate-400" : "bg-indigo-100 text-indigo-700"
+      } ${className}`}
+    >
+      {initials(name)}
+    </span>
+  );
+}
+
+// Your account: who you are, and a new password.
+function AccountSettingsModal({ user, onClose }) {
   const change = useChangePassword();
   const toast = useToast();
   const [values, setValues] = useState({ currentPassword: "", newPassword: "", confirm: "" });
@@ -34,8 +56,23 @@ function ChangePasswordModal({ onClose }) {
   }
 
   return (
-    <Modal title="Change password" onClose={change.isPending ? () => {} : onClose}>
+    <Modal title="Account settings" onClose={change.isPending ? () => {} : onClose}>
+      <div className="mb-5 flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-3">
+        <Avatar name={user.name} />
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-slate-900">{user.name}</p>
+          <p className="truncate text-xs text-slate-500">
+            {user.email} · {ROLE_LABELS[user.role] ?? user.role}
+          </p>
+        </div>
+      </div>
+      <p className="mb-3 text-xs text-slate-500">
+        {user.role === "ADMIN"
+          ? "Admins open every project and manage users."
+          : "You can open the projects an admin assigned to you. Ask an admin to change your name, email or projects."}
+      </p>
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
+        <h3 className="text-sm font-semibold text-slate-900">Change password</h3>
         {message && (
           <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{message}</p>
         )}
@@ -65,7 +102,7 @@ function ChangePasswordModal({ onClose }) {
           error={mismatch ? "Passwords don't match" : undefined}
         />
         <div className="flex justify-end gap-2 pt-2">
-          <Button variant="secondary" onClick={onClose} disabled={change.isPending}>Cancel</Button>
+          <Button variant="secondary" onClick={onClose} disabled={change.isPending}>Close</Button>
           <Button type="submit" loading={change.isPending}>Change password</Button>
         </div>
       </form>
@@ -73,34 +110,51 @@ function ChangePasswordModal({ onClose }) {
   );
 }
 
-// Who is signed in, with password change and sign-out (sidebar footer).
+function SignOutDialog({ onClose }) {
+  const logout = useLogout();
+  return (
+    <Modal title="Sign out of AI QA Studio?" onClose={logout.isPending ? () => {} : onClose}>
+      <p className="text-sm text-slate-600">
+        Your projects, evidence and test cases stay saved. Unsent chat drafts on this device are cleared.
+      </p>
+      <div className="mt-5 flex justify-end gap-2">
+        <Button variant="secondary" onClick={onClose} disabled={logout.isPending}>Cancel</Button>
+        <Button loading={logout.isPending} onClick={() => logout.mutate("manual")}>Sign out</Button>
+      </div>
+    </Modal>
+  );
+}
+
+// Who is signed in, with account settings and sign-out (sidebar footer).
 export function AccountMenu() {
   const user = useCurrentUser();
-  const logout = useLogout();
-  const [changing, setChanging] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   if (!user) return null;
+  const role = ROLE_LABELS[user.role] ?? user.role;
 
   return (
     <div className="space-y-2">
-      <div className="min-w-0">
-        <p className="flex items-center gap-2 truncate text-sm font-medium text-slate-900">
-          <span className="truncate">{user.name}</span>
-          {user.role === "ADMIN" && (
-            <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">Admin</span>
-          )}
-        </p>
-        <p className="truncate text-xs text-slate-500">{user.email}</p>
-      </div>
-      <div className="flex gap-1">
-        <Button variant="ghost" size="sm" icon={KeyRound} onClick={() => setChanging(true)}>
-          Password
-        </Button>
-        <Button variant="ghost" size="sm" icon={LogOut} loading={logout.isPending} onClick={() => logout.mutate()}>
-          Sign out
-        </Button>
-      </div>
-      {changing && <ChangePasswordModal onClose={() => setChanging(false)} />}
+      <button
+        type="button"
+        onClick={() => setSettingsOpen(true)}
+        aria-label={`Account settings for ${user.name}`}
+        className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white/60 px-3 py-2 text-left hover:bg-slate-100"
+      >
+        <Avatar name={user.name} />
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-semibold text-slate-900">{user.name}</span>
+          <span className="block truncate text-xs text-slate-500">
+            {role} · Account settings
+          </span>
+        </span>
+      </button>
+      <Button variant="ghost" size="sm" icon={LogOut} onClick={() => setSigningOut(true)}>
+        Sign out
+      </Button>
+      {settingsOpen && <AccountSettingsModal user={user} onClose={() => setSettingsOpen(false)} />}
+      {signingOut && <SignOutDialog onClose={() => setSigningOut(false)} />}
     </div>
   );
 }

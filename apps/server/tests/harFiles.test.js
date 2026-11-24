@@ -68,7 +68,7 @@ describe("HAR library", () => {
   it("deletes the HAR and its folder; only the uploader or an admin may", async () => {
     const { id } = (await save()).body.data;
     const dir = path.join(filesRoot, "har-files", id);
-    const member = await createSignedInUser({ email: "member@test.local", name: "Member" });
+    const member = await createSignedInUser({ email: "member@test.local", name: "Member", projectIds: [project.id] });
 
     expect((await request(app).get(`${base}/${id}`).set("Cookie", member.cookie)).status).toBe(200);
     expect((await request(app).delete(`${base}/${id}`).set("Cookie", member.cookie)).status).toBe(403);

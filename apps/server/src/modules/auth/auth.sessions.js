@@ -2,15 +2,25 @@ import { createHash, randomBytes } from "node:crypto";
 
 export const SESSION_COOKIE = "aqs_session";
 export const SESSION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+// Without "Remember me" the cookie ends with the browser, and the session
+// itself ends after this long even if the browser stays open.
+export const SHORT_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 const hashToken = (token) => createHash("sha256").update(token).digest("hex");
 
-export const publicUser = ({ id, email, name, role, createdAt }) => ({
-  id,
-  email,
-  name,
-  role,
-  createdAt,
+// Shown in lists: "Disabled", "Invited" (added, never signed in) or "Active".
+export const userStatus = ({ active, lastLoginAt }) =>
+  !active ? "DISABLED" : lastLoginAt ? "ACTIVE" : "INVITED";
+
+export const publicUser = (user) => ({
+  id: user.id,
+  email: user.email,
+  name: user.name,
+  role: user.role,
+  active: user.active,
+  status: userStatus(user),
+  lastLoginAt: user.lastLoginAt ?? null,
+  createdAt: user.createdAt,
 });
 
 // Reads one cookie from the Cookie header (no cookie-parser dependency).
@@ -44,21 +54,27 @@ export function createSessionStore({ prisma, secureCookies = false }) {
   // (e.g. through a tunnel; see "trust proxy" in app.js).
   const secureFor = (req) => secureCookies || Boolean(req.secure);
 
-  async function create(req, res, userId) {
+  async function create(req, res, userId, { remember = true } = {}) {
     const token = randomBytes(32).toString("hex");
-    const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
+    const expiresAt = new Date(Date.now() + (remember ? SESSION_TTL_MS : SHORT_SESSION_TTL_MS));
 
     // Expired sessions are cleaned up whenever someone signs in.
     await prisma.session.deleteMany({ where: { expiresAt: { lt: new Date() } } });
     await prisma.session.create({
-      data: { tokenHash: hashToken(token), userId, expiresAt },
+      data: { tokenHash: hashToken(token), userId, expiresAt, remember },
     });
+    await prisma.user.update({ where: { id: userId }, data: { lastLoginAt: new Date() } });
 
-    res.cookie(SESSION_COOKIE, token, { ...cookieOptions(secureFor(req)), expires: expiresAt });
+    // A cookie without an expiry date is forgotten when the browser closes.
+    res.cookie(SESSION_COOKIE, token, {
+      ...cookieOptions(secureFor(req)),
+      ...(remember ? { expires: expiresAt } : {}),
+    });
     return token;
   }
 
-  // The signed-in user for this request, or null.
+  // The signed-in user for this request, or null. A disabled account's
+  // sessions stop working straight away.
   async function findUser(req) {
     const token = readSessionToken(req);
     if (!token) return null;
@@ -68,8 +84,8 @@ export function createSessionStore({ prisma, secureCookies = false }) {
       include: { user: true },
     });
 
-    if (!session || session.expiresAt <= new Date()) return null;
-    return { user: session.user, sessionId: session.id };
+    if (!session || session.expiresAt <= new Date() || !session.user.active) return null;
+    return { user: session.user, sessionId: session.id, remember: session.remember };
   }
 
   async function destroy(req, res) {

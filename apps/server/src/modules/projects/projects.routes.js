@@ -15,7 +15,8 @@ import { testCasesRouter } from "../test-cases/test-cases.routes.js";
 import { requireAdmin } from "../auth/auth.middleware.js";
 import { bugReportsRouter } from "../bug-reports/bugReports.routes.js";
 import { harFilesRouter } from "../har-files/harFiles.routes.js";
-import { notFound } from "../../lib/errors.js";
+import { ApiError, notFound } from "../../lib/errors.js";
+import { projectMembersSchema } from "../auth/auth.schemas.js";
 
 export function projectsRouter({
   prisma,
@@ -38,11 +39,50 @@ export function projectsRouter({
     next();
   });
   const service = createProjectsService(prisma, storageRoot);
+
+  // Every request inside a project (the project itself and all its tools)
+  // checks that a tester is assigned to it, so removing access takes effect
+  // on their very next request. Admins open every project. Requests without
+  // a sign-in only get here for n8n's callbacks and signed downloads, which
+  // carry their own one-time tokens.
+  router.use(
+    "/:projectId",
+    asyncHandler(async (req, _res, next) => {
+      const user = req.auth?.user;
+      if (!user || (await service.canOpen(user, req.params.projectId))) return next();
+      if (!(await service.exists(req.params.projectId))) throw notFound("Project");
+      throw new ApiError(
+        403,
+        "NO_PROJECT_ACCESS",
+        "You don't have access to this project. Ask an admin to assign it to you.",
+      );
+    }),
+  );
+
   router.get(
     "/",
     asyncHandler(async (req, res) => {
       const { q } = listProjectsQuerySchema.parse(req.query);
-      res.json(await service.list({ q: q || undefined }));
+      res.json(await service.list(req.auth.user, { q: q || undefined }));
+    }),
+  );
+
+  // Admins: which testers are assigned to a project, and changing that list.
+  router.get(
+    "/:projectId/members",
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      if (!(await service.exists(req.params.projectId))) throw notFound("Project");
+      res.json({ userIds: await service.memberIds(req.params.projectId) });
+    }),
+  );
+
+  router.put(
+    "/:projectId/members",
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const { userIds } = projectMembersSchema.parse(req.body ?? {});
+      res.json({ userIds: await service.setMembers(req.params.projectId, userIds) });
     }),
   );
 

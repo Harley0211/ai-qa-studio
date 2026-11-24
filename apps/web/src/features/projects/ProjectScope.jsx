@@ -1,4 +1,4 @@
-import { FolderX } from "lucide-react";
+import { FolderX, Lock } from "lucide-react";
 import { Link, Outlet, useParams } from "react-router-dom";
 import { EmptyState, ErrorState, LoadingState } from "../../components/ui/States.jsx";
 import { PROJECTS_PATH } from "../tools/paths.js";
@@ -12,6 +12,20 @@ export default function ProjectScope() {
 
   if (isPending) return <LoadingState label="Loading project..." />;
   if (isError) {
+    if (error.status === 403) {
+      return (
+        <EmptyState
+          icon={Lock}
+          title="You don't have access to this project"
+          description="An admin hasn't assigned it to you, or your access was removed. Ask an admin if you need it."
+          action={
+            <Link to={PROJECTS_PATH} className="text-sm font-medium text-indigo-600 hover:underline">
+              Back to your projects
+            </Link>
+          }
+        />
+      );
+    }
     return error.status === 404 ? (
       <EmptyState
         icon={FolderX}
