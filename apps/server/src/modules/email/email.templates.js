@@ -40,6 +40,13 @@ const COLORS = {
 
 const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
+// Email apps don't show images packed into the message, so the logo is loaded
+// from the public GitHub repo (a fixed address, unlike the tunnel link).
+// EMAIL_LOGO_URL overrides it, e.g. to test a logo on the staging branch.
+const DEFAULT_LOGO_URL =
+  "https://raw.githubusercontent.com/Harley0211/ai-qa-studio/main/apps/web/public/email-logo.png";
+const logoUrl = () => process.env.EMAIL_LOGO_URL || DEFAULT_LOGO_URL;
+
 const listNames = (names) =>
   names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 
@@ -106,7 +113,7 @@ function layout({ preheader, badgeHtml, title, bodyHtml }) {
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:560px">
       <tr><td style="border-radius:16px 16px 0 0;background:#4f46e5;background-image:linear-gradient(135deg,#4f46e5 0%,#7c3aed 55%,#db2777 100%);padding:26px 32px">
         <table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
-          <td style="width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,.18);text-align:center;font-size:18px;line-height:36px">&#129514;</td>
+          <td style="width:40px;height:40px"><img src="${escapeHtml(logoUrl())}" width="40" height="40" alt="AI QA Studio" style="display:block;width:40px;height:40px;border:0;border-radius:10px"></td>
           <td style="padding-left:12px;font-family:${FONT};font-size:18px;font-weight:700;color:#ffffff;letter-spacing:.01em">AI QA Studio</td>
         </tr></table>
       </td></tr>
