@@ -288,6 +288,8 @@ body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
   50% { transform: rotate(10deg); }
 }
 [data-motion="on"] .live-brand-icon { animation: live-float 4s ease-in-out infinite; }
+.live-brand-logo { box-shadow: 0 4px 14px -4px rgba(22, 163, 74, 0.55); }
+[data-motion="on"] .live-brand-logo { animation: live-float 4s ease-in-out infinite; }
 [data-motion="on"] .live-brand-text { animation: live-text-shine 8s linear infinite; }
 [data-motion="on"] .live-season-badge { display: inline-block; animation: live-sway 3s ease-in-out infinite; }
 

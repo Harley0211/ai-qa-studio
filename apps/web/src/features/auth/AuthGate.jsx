@@ -1,4 +1,4 @@
-import { Check, CheckCircle2, FlaskConical } from "lucide-react";
+import { Check, CheckCircle2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PROJECTS_PATH } from "../tools/paths.js";
@@ -25,7 +25,7 @@ export function formErrors(err) {
 function Brand() {
   return (
     <div className="flex items-center gap-2 text-lg font-semibold text-slate-900">
-      <FlaskConical className="h-6 w-6 text-indigo-600" aria-hidden="true" />
+      <img src="/logo.png" alt="" aria-hidden="true" className="h-9 w-9 rounded-xl" />
       AI QA Studio
     </div>
   );
@@ -288,7 +288,10 @@ export function SignedOutPage({ reason, onSignIn }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 text-slate-900">
       <main className="w-full max-w-md text-center">
-        <p className="text-lg font-semibold text-slate-900">AI QA Studio</p>
+        <p className="flex items-center justify-center gap-2 text-lg font-semibold text-slate-900">
+          <img src="/logo.png" alt="" aria-hidden="true" className="h-9 w-9 rounded-xl" />
+          AI QA Studio
+        </p>
         <span className="mx-auto mt-6 flex h-14 w-14 items-center justify-center rounded-full bg-green-100">
           <CheckCircle2 className="h-7 w-7 text-green-600" aria-hidden="true" />
         </span>

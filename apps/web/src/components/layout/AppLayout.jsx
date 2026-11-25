@@ -4,7 +4,6 @@ import {
   ChevronDown,
   FileJson,
   FileText,
-  FlaskConical,
   FolderKanban,
   Image,
   Lock,
@@ -40,9 +39,7 @@ import { ThemeToggle } from './ThemeToggle.jsx';
 function Brand({ season }) {
   return (
     <div className="flex items-center gap-2 font-semibold text-slate-900">
-      <span className="live-brand-icon flex h-8 w-8 items-center justify-center rounded-lg">
-        <FlaskConical className="h-5 w-5 text-white" aria-hidden="true" />
-      </span>
+      <img src="/logo.png" alt="" aria-hidden="true" className="live-brand-logo h-8 w-8 rounded-lg" />
       <span className="live-brand-text">AI QA Studio</span>
       {season && (
         <span className="live-season-badge" title={`${SEASONS[season].label} theme`} aria-hidden="true">
