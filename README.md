@@ -9,6 +9,18 @@ open the projects an admin assigned to them.
 **Status (24 Nov 2026):** 462 automated tests pass (266 server, 196 web) and the
 production build succeeds.
 
+## Quick start (Windows)
+
+1. Download **[AI-QA-Studio.cmd](https://raw.githubusercontent.com/Harley0211/ai-qa-studio/main/AI-QA-Studio.cmd)**
+   (right-click the link, *Save link as...*) or clone this repo.
+2. Double-click **`AI-QA-Studio.cmd`**. It installs everything that is
+   missing, sets the app up and starts it. The first run takes 10-20 minutes.
+3. When the browser opens, create the **admin account**.
+4. Share the **public link** the window shows (also copied to the clipboard).
+
+Run it again after every restart of the PC. Full guide:
+[One-click install and run](#one-click-install-and-run-windows).
+
 ---
 
 ## 1. Features
@@ -458,32 +470,113 @@ http://127.0.0.1:4100.
 
 ### One-click install and run (Windows)
 
-Double-click **`AI-QA-Studio.cmd`** (in the repo folder). On a new PC you can
-copy just that one file over and double-click it: it downloads the rest from
-GitHub. It does every step below by itself and skips what is already done, so
-run it again any time (after a restart, or to update to the latest code):
+One file installs, updates and runs everything: **`AI-QA-Studio.cmd`**. It
+skips whatever is already done, so the same double-click is used for the first
+install, after every restart, and to get the latest code.
 
-1. Installs what is missing: Node.js, Git, Ollama, n8n and a portable
-   cloudflared (Windows may ask for permission; click **Yes**).
-2. Clones the code (live on `main`, staging on `staging` next to it) or pulls
-   the latest.
-3. Creates `apps\server\.env` with new secrets, installs packages, updates the
-   database and builds the web app (only when the code changed).
-4. Downloads the AI model and sets up n8n: the Header Auth credential and the
-   live and staging workflows, activated. Older copies of the workflow on the
-   same webhook address are turned off.
-5. Starts everything in the background (it keeps running after the window and
-   VS Code are closed). On a fresh install it opens the browser so you create
-   the admin account **first**, and only then starts the public link, which
-   it prints, copies to the clipboard and saves in `run\PUBLIC-LINK.txt`.
+#### What the PC needs
 
-**`AI-QA-Studio-Stop.cmd`** stops the public link, both servers and n8n.
-Logs are in `run\logs\` (next to the repo folder). Options (add after the
-`.cmd` in a terminal): `-NoUpdate`, `-NoStaging`, `-NoTunnel`, `-AutoStart`
-(start when you sign in to Windows), `-RemoveAutoStart`, `-Root <folder>`.
-Without the repo next to it, everything goes in `Documents\AI-QA-Studio`.
+- Windows 10 or 11, internet access, about **5 GB** free disk space and
+  ideally **8 GB RAM** or more.
+- **winget** (built into Windows 11 and up-to-date Windows 10). If it is
+  missing, the launcher says so: install *App Installer* from the Microsoft
+  Store.
+- A network that allows Cloudflare tunnels, for the public link. On a company
+  PC, check with IT first.
 
-Keep the PC awake (no sleep) while others use the public link.
+Nothing else: Node.js, Git, Ollama, n8n, cloudflared, the AI model and the
+code are installed by the launcher.
+
+#### First time on a new PC
+
+1. Get the launcher, either way:
+   - download **[AI-QA-Studio.cmd](https://raw.githubusercontent.com/Harley0211/ai-qa-studio/main/AI-QA-Studio.cmd)**
+     (right-click, *Save link as...*; make sure the name ends in `.cmd`, not
+     `.txt`), or copy it from another PC, or
+   - `git clone https://github.com/Harley0211/ai-qa-studio.git` and use the
+     `AI-QA-Studio.cmd` inside.
+2. Double-click **`AI-QA-Studio.cmd`**. If Windows shows *Windows protected
+   your PC*, click *More info* > *Run anyway*. If it asks for permission to
+   install something, click **Yes**.
+3. Wait. The first run takes **10-20 minutes** (n8n and the 2 GB AI model are
+   the slow parts). Keep the window open.
+4. The browser opens on the app: create the **admin account** now. The first
+   person to open a fresh install becomes admin, so the public link is only
+   started after this step.
+5. The window ends with **AI QA Studio is running** and the **public link**
+   (`https://...trycloudflare.com`), already copied to the clipboard. Sign in
+   there, add your team under **Users**, and send them the link.
+
+You can close the window: the app keeps running in the background. Without
+the repo next to the launcher, everything is installed in
+`Documents\AI-QA-Studio`; when the launcher is inside a clone, it uses the
+folder that holds the clone.
+
+#### Every day / after a restart
+
+Double-click **`AI-QA-Studio.cmd`** again. It pulls the latest code (and
+rebuilds only if something changed), starts whatever is not running and shows
+the link. When nothing changed it takes a few seconds.
+
+- The public link **changes every time the tunnel restarts** (for example
+  after a reboot): share the new one. It is also saved in
+  `run\PUBLIC-LINK.txt`.
+- The link only works while the PC is on and **awake**. Locking the screen is
+  fine; sleep, sign-out, shut-down and update restarts stop the app.
+- To start it automatically when you sign in to Windows, run once in a
+  terminal: `AI-QA-Studio.cmd -AutoStart` (undo with `-RemoveAutoStart`).
+
+#### Stop
+
+Double-click **`AI-QA-Studio-Stop.cmd`**: stops the public link, both
+servers and n8n (Ollama keeps running).
+
+#### Addresses on the PC that runs it
+
+| What | Address |
+|---|---|
+| Live (your team uses the public link) | http://127.0.0.1:4000 |
+| Staging (this PC only) | http://127.0.0.1:4100 |
+| n8n | http://127.0.0.1:5678 |
+
+#### Options
+
+Add after the `.cmd` in a terminal, e.g. `AI-QA-Studio.cmd -NoUpdate`:
+
+| Option | Effect |
+|---|---|
+| `-NoUpdate` | Do not pull new code (quick start) |
+| `-NoStaging` | Skip the staging copy |
+| `-NoTunnel` | Do not start the public link (this PC only) |
+| `-AutoStart` / `-RemoveAutoStart` | Start / stop starting at Windows sign-in |
+| `-Root <folder>` | Install somewhere else |
+| `-Stop` | Same as `AI-QA-Studio-Stop.cmd` |
+
+#### Good to know
+
+- **Each PC is its own app** with its own database, users and link. Nothing is
+  shared between PCs. Run it on one PC and let everyone use its link. To move
+  the app, copy `apps\server\prisma\dev.db` and `apps\server\storage\` to the
+  new PC (with the app stopped on both).
+- n8n on that PC gets the live and staging generation workflows. Older
+  workflows that use the same webhook address are turned off, not deleted.
+- Emails are not set up by the launcher (they need a Gmail app password); see
+  [Emails](#emails).
+
+#### If something goes wrong
+
+The window says what failed. The full log is `run\logs\setup.log`; each
+service has its own log next to it (`live-server.log`, `n8n.log`,
+`tunnel.log`, ...).
+
+| Problem | Fix |
+|---|---|
+| *winget is missing* | Install *App Installer* from the Microsoft Store, run again. |
+| A tool did not install (permission prompt cancelled) | Run again and click **Yes**; Node.js and cloudflared fall back to portable copies. |
+| *The public link did not come up* | The network blocks Cloudflare tunnels. The app still works on the PC itself. |
+| *No admin account yet* | Create it at http://127.0.0.1:4000, then run the launcher again. |
+| *webhook ... is used by another workflow* | Open http://127.0.0.1:5678, turn off the old AI QA Studio workflow, run again. |
+| Forgot a password | Can't be read back (only a hash is stored); an admin resets it on the **Users** page. |
 
 ### Run it live on another computer (step by step, e.g. the office PC)
 
