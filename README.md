@@ -456,6 +456,35 @@ http://127.0.0.1:4100.
    over the live workflow (or delete the old one first), set its credential
    and activate it.
 
+### One-click install and run (Windows)
+
+Double-click **`AI-QA-Studio.cmd`** (in the repo folder). On a new PC you can
+copy just that one file over and double-click it: it downloads the rest from
+GitHub. It does every step below by itself and skips what is already done, so
+run it again any time (after a restart, or to update to the latest code):
+
+1. Installs what is missing: Node.js, Git, Ollama, n8n and a portable
+   cloudflared (Windows may ask for permission; click **Yes**).
+2. Clones the code (live on `main`, staging on `staging` next to it) or pulls
+   the latest.
+3. Creates `apps\server\.env` with new secrets, installs packages, updates the
+   database and builds the web app (only when the code changed).
+4. Downloads the AI model and sets up n8n: the Header Auth credential and the
+   live and staging workflows, activated. Older copies of the workflow on the
+   same webhook address are turned off.
+5. Starts everything in the background (it keeps running after the window and
+   VS Code are closed). On a fresh install it opens the browser so you create
+   the admin account **first**, and only then starts the public link, which
+   it prints, copies to the clipboard and saves in `run\PUBLIC-LINK.txt`.
+
+**`AI-QA-Studio-Stop.cmd`** stops the public link, both servers and n8n.
+Logs are in `run\logs\` (next to the repo folder). Options (add after the
+`.cmd` in a terminal): `-NoUpdate`, `-NoStaging`, `-NoTunnel`, `-AutoStart`
+(start when you sign in to Windows), `-RemoveAutoStart`, `-Root <folder>`.
+Without the repo next to it, everything goes in `Documents\AI-QA-Studio`.
+
+Keep the PC awake (no sleep) while others use the public link.
+
 ### Run it live on another computer (step by step, e.g. the office PC)
 
 Everything below is typed in **PowerShell** on the other computer unless it
